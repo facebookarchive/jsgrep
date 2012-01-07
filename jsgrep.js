@@ -14,11 +14,15 @@ cli.parse({
 
 var pattern = cli.options.pattern;
 var patternAst = Narcissus.parser.parse(pattern, 'pattern', 0);
-if (patternAst.children.length == 1 &&
-    patternAst.children[0].type == Narcissus.definitions.tokenIds.SEMICOLON &&
+if (patternAst.children.length == 1) {
+  // Discard the script node
+  patternAst = patternAst.children[0];
+}
+
+if (patternAst.type == Narcissus.definitions.tokenIds.SEMICOLON &&
     pattern.substr(pattern.length - 1) != ';') {
-  // Searching for single expression, discard script and semicolon nodes
-  patternAst = patternAst.children[0].expression;
+  // Searching for single expression, discard the semicolon node
+  patternAst = patternAst.expression;
 }
 
 if (cli.options['dump-ast']) {
