@@ -1,0 +1,28 @@
+# jsgrep: a syntactically-aware grep for JavaScript
+
+Jsgrep is program that allows you to search for a particular JavaScript pattern,
+using the abstract syntax tree (AST) of the program, which allows you to match
+for particular identifiers, string constants, function calls, etc., without
+having to be concerned with the whitespace of the original program.
+
+## Examples:
+
+**Find all instances of a string constant**
+
+    $ jsgrep.js -e '"debug"' tests/*.js
+    cli.js:             } else if (enable.status && (o === 'k' || o === 'no-color' || o === 'debug')) {
+    cli.js:                 show_debug = o === 'debug';
+    cli.js:     case 'debug':
+
+Jsgrep parses the query as JavaScript and uses that to compare against the
+target program, so the type of quote you search for does not matter.
+
+**Find calls to window.setTimeout with a 0 timeout**
+
+    $ jsgrep.js -e 'setTimeout(A, 0)' tests/*.js
+    tests/jquery.js:        setTimeout( function() {
+    tests/jquery.js:    setTimeout( clearFxNow, 0 );
+
+Because jsgrep is using the abstract syntax tree, it can identify that the
+particular call to `setTimeout` matches, even when it spans multiple lines
+and contains an inline function.
