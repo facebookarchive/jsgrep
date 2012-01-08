@@ -8,7 +8,9 @@ var Narcissus = require('narcissus/main');
 
 cli.setUsage(cli.app + ' [OPTIONS] FILES');
 cli.parse({
-  pattern: [ 'e', 'Pattern to search for', 'string' ],
+  pattern: [ 'e', 'Pattern to search for, must be valid JavaScript', 'string' ],
+  print: [ 'p', 'Instead of printing the matching line, print the matching ' +
+                'variable', 'string' ],
   'dump-ast': [ false, 'Instead of searching, dump the AST for the pattern' ]
 });
 
@@ -44,9 +46,15 @@ for (var i = 0; i < cli.args.length; i++) {
   }
 
   forEachNode(ast, function(node) {
-    if (astIsEqual(node, patternAst)) {
-      console.log(cli.args[i] + ": " +
-        sourceLines[node.lineno - 1]);
+    var variables = {};
+    if (astIsEqual(node, patternAst, variables)) {
+      var output = sourceLines[node.lineno - 1];
+      if (cli.options['print']) {
+        var matchNode = variables[cli.options.print];
+        output = matchNode.tokenizer.source.substring(
+          matchNode.start, matchNode.end);
+      }
+      console.log(cli.args[i] + ": " + output);
     }
   });
 }
@@ -56,12 +64,19 @@ function tokenString(tt) {
   return /^\W/.test(t) ? Narcissus.definitions.opTypeNames[t] : t.toUpperCase();
 }
 
-function astIsEqual(node, pattern) {
+function astIsEqual(node, pattern, variables) {
   const tokens = Narcissus.definitions.tokenIds;
 
   if (pattern.type == tokens.IDENTIFIER &&
       /^[A-Z](_.*)?$/.test(pattern.value)) {
-    return true;
+    if (pattern.value in variables) {
+      // Variable already matched, compare this node to that value
+      return astIsEqual(node, variables[pattern.value]);
+    } else {
+      // Bind variable to this value
+      variables[pattern.value] = node;
+      return true;
+    }
   }
 
   if (node.type != pattern.type) {
@@ -142,7 +157,7 @@ function astIsEqual(node, pattern) {
     //case tokens.SCRIPT:
       if (node.children.length == pattern.children.length) {
         for (var i = 0; i < node.children.length; i++) {
-          if (!astIsEqual(node.children[i], pattern.children[i])) {
+          if (!astIsEqual(node.children[i], pattern.children[i], variables)) {
             return false;
           }
         }
@@ -154,7 +169,7 @@ function astIsEqual(node, pattern) {
       if (!node.expression && !pattern.expression) {
         return true;
       } else if (node.expression && pattern.expression) {
-        return astIsEqual(node.expression, pattern.expression);
+        return astIsEqual(node.expression, pattern.expression, variables);
       }
       return false;
       break;
@@ -307,6 +322,7 @@ function forEachNode(node, callback) {
     case tokens.BLOCK:
     case tokens.CALL:
     case tokens.COMMA:
+    case tokens.CONST:
     case tokens.DELETE:
     case tokens.DOT:
     case tokens.HOOK:
