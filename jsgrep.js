@@ -27,12 +27,16 @@ if (patternAst.type == Narcissus.definitions.tokenIds.SEMICOLON &&
 
 if (cli.options['dump-ast']) {
   console.log(patternAst.toString());
-  return;
+  process.exit(0);
 }
 
 for (var i = 0; i < cli.args.length; i++) {
-  var source = fs.readFileSync(cli.args[i]);
-  var sourceLines = source.toString().split('\n');
+  var source = fs.readFileSync(cli.args[i]).toString();
+  // If the first character is a shebang, comment it out
+  if (source.substr(0, 2) == '#!') {
+    source = "// " + source;
+  }
+  var sourceLines = source.split('\n');
   try {
     var ast = Narcissus.parser.parse(source, cli.args[i], 1);
   } catch(e) {

@@ -3,6 +3,13 @@ var parse = require('narcissus/lib/parser').parse;
 var a = 1, b = 2;
 var c;
 
+var obj = {
+  one: 'yes',
+  two: 'no'
+};
+
+obj['yes'] = obj['yes'];
+
 function hats(c) {
   var a = function() {
     return b;
