@@ -5,6 +5,9 @@ var _ = require('underscore');
 
 var Narcissus = require('narcissus/main');
 
+/// Used to print the matching snippet rather than the first line of it.
+const PRINT_ONLY_MATCHING = ':root:';
+
 var config = {
   patterns: [ ],
   paths: [ ],
@@ -26,6 +29,9 @@ function usage(hasError) {
   console.log("  -e, --pattern=PATTERN Pattern to search for. This must be valid JavaScript.");
   console.log("                        Multiple patterns can be specified.");
   console.log("");
+  console.log("  -o, --only-matching   Instead of printing the matching line, only print the");
+  console.log("                        matching pattern.");
+  console.log("");
   console.log("  -p, --print=VAR       Instead of printing the matching line, print the");
   console.log("                        matching variable.");
   console.log("");
@@ -36,13 +42,16 @@ function usage(hasError) {
 (function parseArgs() {
   var getopt = require('node-getopt');
   var parser = new getopt.BasicParser(
-    'e:(pattern)p:(print)D(dump-ast)h(help)',
+    'e:(pattern)o(only-matching)p:(print)D(dump-ast)h(help)',
     process.argv);
 
   while ((option = parser.getopt()) !== undefined) {
     switch(option.option) {
       case 'e':
         config.patterns.push(option.optarg);
+        break;
+      case 'o':
+        config.print = PRINT_ONLY_MATCHING;
         break;
       case 'p':
         config.print = option.optarg;
@@ -113,7 +122,9 @@ for (var i = 0; i < config.paths.length; i++) {
       var variables = {};
       if (astIsEqual(node, patternAst, variables)) {
         var output = sourceLines[node.lineno - 1];
-        if (config.print && variables[config.print]) {
+        if (config.print === PRINT_ONLY_MATCHING) {
+          output = node.tokenizer.source.substring(node.start, node.end);
+        } else if (config.print && variables[config.print]) {
           var matchNode = variables[config.print];
           output = matchNode.tokenizer.source.substring(
             matchNode.start, matchNode.end);
