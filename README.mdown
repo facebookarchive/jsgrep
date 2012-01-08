@@ -9,17 +9,15 @@ having to be concerned with the whitespace of the original program.
 
 **Find all instances of a string constant**
 
-    $ jsgrep.js -e '"debug"' tests/*.js
-    cli.js:             } else if (enable.status && (o === 'k' || o === 'no-color' || o === 'debug')) {
-    cli.js:                 show_debug = o === 'debug';
-    cli.js:     case 'debug':
+    $ ./jsgrep "'image'" tests/*.js
+    tests/jquery.js:            return elem.nodeName.toLowerCase() === "input" && "image" === elem.type;
 
 Jsgrep parses the query as JavaScript and uses that to compare against the
 target program, so the type of quote you search for does not matter.
 
 **Find calls to window.setTimeout with a 0 timeout**
 
-    $ jsgrep.js -e 'setTimeout(A, 0)' tests/*.js
+    $ jsgrep 'setTimeout(A, 0)' tests/*.js
     tests/jquery.js:        setTimeout( function() {
     tests/jquery.js:    setTimeout( clearFxNow, 0 );
 
@@ -27,9 +25,25 @@ Because jsgrep is using the abstract syntax tree, it can identify that the
 particular call to `setTimeout` matches, even when it spans multiple lines
 and contains an inline function.
 
+
+**Find value defaulting**
+
+    $ ./jsgrep "A = A || B;" tests/*.js
+    tests/jquery.js:            args = args || [];
+    tests/jquery.js:            type = type || "fx";
+    tests/jquery.js:        type = type || "fx";
+    tests/jquery.js:    results = results || [];
+    tests/jquery.js:    context = context || document;
+    tests/jquery.js:        result = result || 1;
+    tests/jquery.js:    qualifier = qualifier || 0;
+    tests/jquery.js:        context = context || document;
+    tests/jquery.js:    dataType = dataType || options.dataTypes[ 0 ];
+
+When the pattern references the same metavariable multiple times, jsgrep ensures
+that the value of the metavariable is the same throughout the match.
+
 ## TODO
 
-* Switch to https://github.com/davepacheco/node-getopt
 * Add support for ... to the parser
 * Add support for { asdf: value } patterns
 

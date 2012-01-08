@@ -1,61 +1,126 @@
 #!/usr/bin/env node
 
 var fs = require('fs');
-var cli = require('cli');
 var _ = require('underscore');
 
 var Narcissus = require('narcissus/main');
 
-cli.setUsage(cli.app + ' [OPTIONS] FILES');
-cli.parse({
-  pattern: [ 'e', 'Pattern to search for, must be valid JavaScript', 'string' ],
-  print: [ 'p', 'Instead of printing the matching line, print the matching ' +
-                'variable', 'string' ],
-  'dump-ast': [ false, 'Instead of searching, dump the AST for the pattern' ]
-});
+var config = {
+  patterns: [ ],
+  paths: [ ],
+  print: false,
+  dumpAst: false
+};
 
-var pattern = cli.options.pattern;
-var patternAst = Narcissus.parser.parse(pattern, 'pattern', 0);
-if (patternAst.children.length == 1) {
-  // Discard the script node
-  patternAst = patternAst.children[0];
-}
-
-if (patternAst.type == Narcissus.definitions.tokenIds.SEMICOLON &&
-    pattern.substr(pattern.length - 1) != ';') {
-  // Searching for single expression, discard the semicolon node
-  patternAst = patternAst.expression;
-}
-
-if (cli.options['dump-ast']) {
-  console.log(patternAst.toString());
+function usage(hasError) {
+  if (hasError) {
+    console.log("See jsgrep --help for usage information.");
+    process.exit(option.error ? 1 : 0);
+  }
+  console.log("jsgrep: Syntactically aware grep for JavaScript");
+  console.log("");
+  console.log("Usage: jsgrep [OPTIONS] PATTERN FILES...");
+  console.log("");
+  console.log("Options:");
+  console.log("");
+  console.log("  -e, --pattern=PATTERN Pattern to search for. This must be valid JavaScript.");
+  console.log("                        Multiple patterns can be specified.");
+  console.log("");
+  console.log("  -p, --print=VAR       Instead of printing the matching line, print the");
+  console.log("                        matching variable.");
+  console.log("");
+  console.log("      --dump-ast        Instead of searching, dump the AST for the patterns.");
   process.exit(0);
 }
 
-for (var i = 0; i < cli.args.length; i++) {
-  var source = fs.readFileSync(cli.args[i]).toString();
+(function parseArgs() {
+  var getopt = require('node-getopt');
+  var parser = new getopt.BasicParser(
+    'e:(pattern)p:(print)D(dump-ast)h(help)',
+    process.argv);
+
+  while ((option = parser.getopt()) !== undefined) {
+    switch(option.option) {
+      case 'e':
+        config.patterns.push(option.optarg);
+        break;
+      case 'p':
+        config.print = option.optarg;
+        break;
+      case 'D':
+        config.dumpAst = true;
+        break;
+      case 'h':
+      case '?':
+        usage(option.error);
+        break;
+    }
+  }
+
+  config.paths = process.argv.slice(parser.optind());
+})();
+
+if (config.patterns.length == 0 && config.paths.length > 0) {
+  config.patterns.push(config.paths.shift());
+}
+
+if (config.patterns.length == 0) {
+  console.error("At least one pattern must be specified.");
+  usage(true);
+}
+
+var patternsAst = [];
+for (var i = 0; i < config.patterns.length; i++) {
+  var pattern = config.patterns[i];
+  var patternAst = Narcissus.parser.parse(pattern, 'pattern', 0);
+  if (patternAst.children.length == 1) {
+    // Discard the script node
+    patternAst = patternAst.children[0];
+  }
+
+  if (patternAst.type == Narcissus.definitions.tokenIds.SEMICOLON &&
+      pattern.substr(pattern.length - 1) != ';') {
+    // Searching for single expression, discard the semicolon node
+    patternAst = patternAst.expression;
+  }
+
+  patternsAst[i] = patternAst;
+}
+
+if (config.dumpAst) {
+  _.each(patternsAst, function(ast, i) {
+    console.log("Pattern: " + config.patterns[i]);
+    console.log(ast.toString());
+  });
+  process.exit(0);
+}
+
+for (var i = 0; i < config.paths.length; i++) {
+  var source = fs.readFileSync(config.paths[i]).toString();
   // If the first character is a shebang, comment it out
   if (source.substr(0, 2) == '#!') {
     source = "// " + source;
   }
   var sourceLines = source.split('\n');
   try {
-    var ast = Narcissus.parser.parse(source, cli.args[i], 1);
+    var ast = Narcissus.parser.parse(source, config.paths[i], 1);
   } catch(e) {
     console.warn(e.message);
   }
 
   forEachNode(ast, function(node) {
-    var variables = {};
-    if (astIsEqual(node, patternAst, variables)) {
-      var output = sourceLines[node.lineno - 1];
-      if (cli.options['print']) {
-        var matchNode = variables[cli.options.print];
-        output = matchNode.tokenizer.source.substring(
-          matchNode.start, matchNode.end);
+    _.each(patternsAst, function(patternAst) {
+      var variables = {};
+      if (astIsEqual(node, patternAst, variables)) {
+        var output = sourceLines[node.lineno - 1];
+        if (config.print && variables[config.print]) {
+          var matchNode = variables[config.print];
+          output = matchNode.tokenizer.source.substring(
+            matchNode.start, matchNode.end);
+        }
+        console.log(config.paths[i] + ": " + output);
       }
-      console.log(cli.args[i] + ": " + output);
-    }
+    });
   });
 }
 
@@ -257,7 +322,9 @@ function astIsEqual(node, pattern, variables) {
       break;
 
     default:
-      cli.fatal("Pattern type is not yet supported: " + tokenString(node.type));
+      console.error("jsgrep: Pattern type is not yet supported: " +
+        tokenString(node.type));
+      process.exit(1);
       break;
   }
 }
@@ -442,9 +509,12 @@ function forEachNode(node, callback) {
 
     default:
       console.error(node.toString());
-      cli.fatal("forEachNode: " +
+      console.error("jsgrep: forEachNode: " +
         node.tokenizer.filename + ":" + node.lineno +
         ": Unimplemented node type");
+      process.exit(1);
       break;
   }
 }
+
+// vim: ft=javascript
