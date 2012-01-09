@@ -25,6 +25,15 @@ cases, the second parameter to setTimeout was a literal value of 0.
 When the pattern references the same metavariable multiple times, jsgrep ensures
 that the value of the metavariable is the same throughout the match.
 
+**Find the names of all invoked events**
+
+    $ ./jsgrep -p B "A.fire(B, ...)" tests/*.j
+    tests/connect.js: 'auth.logout'
+    tests/connect.js: 'auth.login'
+
+The `...` operator matches 0 or more expressions in function calls and array
+initializers.
+
 **Find classes that have a 'path' property**
 
     $ jsgrep -p C "JX.install(C, { properties: { path: X } })" tests/*.js
@@ -37,8 +46,8 @@ the `-p` flag to print only a particular matched variable.
 
 ## TODO
 
-* Add support for ... to the parser
-* Consider support for --where/--eval
+* Consider support for --where/--eval and/or not-patterns
+* Support for -l -L -n -h -H
 * Support for most statements in patterns
 
 ## Contributors

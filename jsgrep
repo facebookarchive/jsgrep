@@ -257,9 +257,7 @@ function astIsEqual(node, pattern, variables) {
     case tokens.HOOK:
     case tokens.INDEX:
     // Special
-    case tokens.ARRAY_INIT: // TODO: handle ...
-    case tokens.LIST: // TODO: handle ...
-    case tokens.OBJECT_INIT: // TODO: handle ...
+    case tokens.OBJECT_INIT:
     case tokens.PROPERTY_INIT:
     //case tokens.SCRIPT:
       if (node.children.length == pattern.children.length) {
@@ -270,6 +268,11 @@ function astIsEqual(node, pattern, variables) {
         }
         return true;
       }
+      break;
+
+    case tokens.ARRAY_INIT:
+    case tokens.LIST:
+      return astMatchEllipsis(node.children, pattern.children, variables);
       break;
 
     case tokens.LET:
@@ -411,6 +414,51 @@ function astIsEqual(node, pattern, variables) {
       process.exit(1);
       break;
   }
+}
+
+function astMatchEllipsis(nodes, patterns, variables) {
+  // XXX(rpatterson): this needs testing!
+  const tokens = Narcissus.definitions.tokenIds;
+  var permitVar = true, clonedVars = null;
+  function go(i, j) {
+    if (i == nodes.length && j == patterns.length) {
+      return true;
+    }
+
+    if (j == patterns.length) {
+      return false;
+    }
+
+    if (patterns[j].type == tokens.ELLIPSIS && j == patterns.length - 1) {
+      return true;
+    }
+
+    if(i == nodes.length) {
+      return false;
+    }
+
+    if (patterns[j].type == tokens.ELLIPSIS) {
+      permitVar = false;
+      clonedVars = _.clone(variables);
+      return go(i, j + 1) || go(i + 1, j);
+    }
+
+    return astIsEqual(nodes[i], patterns[j],
+                      permitVar ? variables : clonedVars) &&
+      go(i + 1, j + 1);
+  }
+  var result = go(0, 0);
+  if (!permitVar && _.keys(clonedVars).length != _.keys(variables).length) {
+    // ..., A, ... is ambiguous, and if A was matched later in the pattern, we
+    // would have to backtrack to the ellipsis to try a different match. That's
+    // annoying.
+    //
+    // XXX(rpatterson): This incorrectly bails for (..., A)
+    console.error("jsgrep: Matching metavariables inside partially-matched " +
+      "lists is unsupported. Sorry!");
+    process.exit(1);
+  }
+  return result;
 }
 
 function forEachNode(node, callback) {

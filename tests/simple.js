@@ -21,6 +21,8 @@ function hats(c) {
 a = (b = 2) || c + 1;
 hats(b);
 
+foo(0, 'haru', 'mamburu');
+
 try {
   q = REFERENCEERROR;
 } catch(e) {
