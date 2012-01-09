@@ -97,20 +97,20 @@ function usage(hasError) {
   }
 
   config.paths = process.argv.slice(parser.optind());
+
+  if (config.patterns.length == 0 && config.paths.length > 0) {
+    config.patterns.push(config.paths.shift());
+  }
+
+  if (config.patterns.length == 0) {
+    console.error("At least one pattern must be specified.");
+    usage(true);
+  }
+
+  if (config.filename === null) {
+    config.filename = config.paths.length > 1;
+  }
 })();
-
-if (config.patterns.length == 0 && config.paths.length > 0) {
-  config.patterns.push(config.paths.shift());
-}
-
-if (config.patterns.length == 0) {
-  console.error("At least one pattern must be specified.");
-  usage(true);
-}
-
-if (config.filename === null) {
-  config.filename = config.paths.length > 1;
-}
 
 var patternsAst = [];
 for (var i = 0; i < config.patterns.length; i++) {
@@ -145,7 +145,12 @@ for (var i = 0; i < config.paths.length; i++) {
   if (source.substr(0, 2) == '#!') {
     source = "// " + source;
   }
-  var sourceLines = source.split('\n');
+
+  var sourceLines = null;
+  if (config.print == PRINT_FIRST_LINE) {
+    sourceLines = source.split('\n');
+  }
+
   try {
     var ast = Narcissus.parser.parse(source, config.paths[i], 1);
   } catch(e) {
@@ -153,45 +158,50 @@ for (var i = 0; i < config.paths.length; i++) {
   }
 
   try {
-    forEachNode(ast, function(node) {
-      _.each(patternsAst, function(patternAst) {
-        var variables = {};
-        if (astIsEqual(node, patternAst, variables)) {
-          var output = false, lineNumber = node.lineno;
+    require('./lib/jsgrep.js').jsgrep({
+      source: ast,
+      patterns: patternsAst,
+      strictMatches: config.strictMatches,
+      callback: function(node, variables) {
+        var output = false, lineNumber = node.lineno;
 
-          fileHasMatch = true;
+        fileHasMatch = true;
 
-          if (config.print === PRINT_FIRST_LINE) {
-            output = sourceLines[node.lineno - 1];
-          } else if (config.print === PRINT_ONLY_MATCHING) {
-            output = node.tokenizer.source.substring(node.start, node.end);
-          } else if (config.print === PRINT_METAVAR) {
-            if (!variables[config.printMetavar]) {
-              console.error("jsgrep: Metavariable " + config.printMetavar +
-                " is not bound to any expression.");
-              process.exit(1);
-            } else {
-              var matchNode = variables[config.printMetavar];
-              output = matchNode.tokenizer.source.substring(
-                matchNode.start, matchNode.end);
-              lineNumber = matchNode.lineno;
-            }
+        if (config.print === PRINT_FIRST_LINE) {
+          output = sourceLines[node.lineno - 1];
+        } else if (config.print === PRINT_ONLY_MATCHING) {
+          output = node.tokenizer.source.substring(node.start, node.end);
+        } else if (config.print === PRINT_METAVAR) {
+          if (!variables[config.printMetavar]) {
+            throw {
+              message: "Metavariable " + config.printMetavar +
+                " is not bound to any expression."
+            };
           } else {
-            // Print filenames, so bail the search for speed
-            throw 'done';
+            var matchNode = variables[config.printMetavar];
+            output = matchNode.tokenizer.source.substring(
+              matchNode.start, matchNode.end);
+            lineNumber = matchNode.lineno;
           }
-          if (output) {
-            if (output.indexOf('\n') > 0) {
-              output = output.substr(0, output.indexOf('\n'));
-            }
-            console.log((config.filename ? config.paths[i] + ":" : "") +
-                        (config.lineNumber ? lineNumber + ":" : "") +
-                        output);
-          }
+        } else {
+          // Print filenames, so bail the search for speed
+          throw 'done';
         }
-      });
+        if (output) {
+          if (output.indexOf('\n') > 0) {
+            output = output.substr(0, output.indexOf('\n'));
+          }
+          console.log((config.filename ? config.paths[i] + ":" : "") +
+                      (config.lineNumber ? lineNumber + ":" : "") +
+                      output);
+        }
+      }
     });
   } catch(e) {
+    if (!(e instanceof Error) && e.message) {
+      console.error("jsgrep: " + e.message);
+      process.exit(1);
+    }
     if (e !== 'done') {
       throw e;
     }
@@ -200,513 +210,6 @@ for (var i = 0; i < config.paths.length; i++) {
   if (config.print == PRINT_FILES_NOT_MATCHING && !fileHasMatch ||
       config.print == PRINT_FILES_MATCHING && fileHasMatch) {
     console.log(config.paths[i]);
-  }
-}
-
-function tokenString(tt) {
-  var t = Narcissus.definitions.tokens[tt];
-  return /^\W/.test(t) ? Narcissus.definitions.opTypeNames[t] : t.toUpperCase();
-}
-
-function astIsEqual(node, pattern, variables) {
-  const tokens = Narcissus.definitions.tokenIds;
-
-  if (pattern.type == tokens.IDENTIFIER &&
-      /^[A-Z](_.*)?$/.test(pattern.value)) {
-    if (pattern.value in variables) {
-      // Variable already matched, compare this node to that value
-      return astIsEqual(node, variables[pattern.value]);
-    } else {
-      // Bind variable to this value
-      variables[pattern.value] = node;
-      return true;
-    }
-  }
-
-  if (node.type != pattern.type) {
-    return false;
-  }
-
-  if (node.type == tokens.OBJECT_INIT && !config.strictMatches) {
-    // Strict matching will be handled normally (below).
-    if (pattern.children.length > node.children.length) {
-      return false;
-    }
-
-    var keys = _.clone(pattern.children);
-    for (var i = 0; i < node.children.length; i++) {
-      for (var j = 0; j < keys.length;) {
-        if (astIsEqual(node.children[i], keys[j], variables)) {
-          keys.splice(j, 1);
-          break;
-        } else {
-          j++;
-        }
-      }
-
-      if (keys.length == 0) {
-        break;
-      }
-    }
-
-    // No keys left over -> match.
-    return keys.length == 0;
-  }
-
-  switch(node.type) {
-    // Core values
-    case tokens.FALSE:
-    case tokens.IDENTIFIER:
-    case tokens.NULL:
-    case tokens.NUMBER:
-    case tokens.REGEXP:
-    case tokens.STRING:
-    case tokens.THIS:
-    case tokens.TRUE:
-      return node.value == pattern.value;
-      break;
-
-    // 0-child statements
-    case tokens.BREAK:
-    case tokens.CONTINUE:
-      return true;
-      break;
-
-    // Unary expressions
-    case tokens.BITWISE_NOT:
-    case tokens.DECREMENT:
-    case tokens.INCREMENT:
-    case tokens.NEW:
-    case tokens.NEW_WITH_ARGS:
-    case tokens.NOT:
-    case tokens.TYPEOF:
-    case tokens.UNARY_MINUS:
-    case tokens.UNARY_PLUS:
-    case tokens.VOID:
-    // Binary expressions
-    case tokens.AND:
-    case tokens.BITWISE_AND:
-    case tokens.BITWISE_OR:
-    case tokens.BITWISE_XOR:
-    case tokens.DIV:
-    case tokens.EQ:
-    case tokens.GE:
-    case tokens.GT:
-    case tokens.IN:
-    case tokens.INSTANCEOF:
-    case tokens.LE:
-    case tokens.LSH:
-    case tokens.LT:
-    case tokens.MINUS:
-    case tokens.MOD:
-    case tokens.MUL:
-    case tokens.NE:
-    case tokens.OR:
-    case tokens.PLUS:
-    case tokens.RSH:
-    case tokens.STRICT_EQ:
-    case tokens.STRICT_NE:
-    case tokens.ULSH:
-    case tokens.URSH:
-    // Other
-    case tokens.ASSIGN:
-    //case tokens.BLOCK:
-    case tokens.CALL:
-    case tokens.COMMA:
-    case tokens.DELETE:
-    case tokens.DOT:
-    case tokens.HOOK:
-    case tokens.INDEX:
-    // Special
-    case tokens.OBJECT_INIT:
-    case tokens.PROPERTY_INIT:
-    //case tokens.SCRIPT:
-      if (node.children.length == pattern.children.length) {
-        for (var i = 0; i < node.children.length; i++) {
-          if (!astIsEqual(node.children[i], pattern.children[i], variables)) {
-            return false;
-          }
-        }
-        return true;
-      }
-      break;
-
-    case tokens.ARRAY_INIT:
-    case tokens.LIST:
-      return astMatchEllipsis(node.children, pattern.children, variables);
-      break;
-
-    case tokens.LET:
-    case tokens.VAR:
-      // All of var's children are IDENTIFIERs with name/initializer values
-      // TODO: this does not support destructuring assignments
-      if (pattern.children.length > node.children.length) {
-        return false;
-      }
-
-      var keys = _.clone(pattern.children);
-      for (var i = 0; i < node.children.length; i++) {
-        for (var j = 0; j < keys.length;) {
-          if (astIsEqual(node.children[i], keys[j], variables)) {
-            // If the pattern has an initializer, it must be equal to the one
-            // in the source.
-            if (keys[j].initializer &&
-               (!node.children[i].initializer ||
-                !astIsEqual(node.children[i].initializer,
-                            keys[j].initializer, variables))) {
-              return false;
-            }
-            // If in strict mode and the pattern has no initializer, neither can
-            // the source.
-            if (!keys[j].initializer && config.strictMatches &&
-                node.children[i].initializer) {
-              return false;
-            }
-            keys.splice(j, 1);
-            break;
-          } else {
-            j++;
-          }
-        }
-
-        if (keys.length == 0) {
-          break;
-        }
-      }
-
-      // No keys left over -> match.
-      return keys.length == 0;
-      break;
-
-    case tokens.SEMICOLON:
-      if (!node.expression && !pattern.expression) {
-        return true;
-      } else if (node.expression && pattern.expression) {
-        return astIsEqual(node.expression, pattern.expression, variables);
-      }
-      return false;
-      break;
-
-    //case tokens.DO:
-      //forEachNode(node.body, callback);
-      //forEachNode(node.condition, callback);
-      break;
-
-    //case tokens.WHILE:
-      //forEachNode(node.condition, callback);
-      //forEachNode(node.body, callback);
-      break;
-
-    //case tokens.FUNCTION:
-      //forEachNode(node.body, callback);
-      break;
-
-    //case tokens.RETURN:
-      if (node.value) {
-        //forEachNode(node.value, callback);
-      }
-      break;
-
-    //case tokens.SWITCH:
-      //forEachNode(node.discriminant, callback);
-      _.each(node.cases, function(child) {
-        //forEachNode(child, callback);
-      });
-      break;
-
-    //case tokens.DEFAULT:
-      //forEachNode(node.statements, callback);
-      break;
-
-    //case tokens.CASE:
-      //forEachNode(node.caseLabel, callback);
-      //forEachNode(node.statements, callback);
-      break;
-
-    //case tokens.LABEL:
-      //forEachNode(node.statement, callback);
-      break;
-
-    //case tokens.FOR_IN:
-      //forEachNode(node.iterator, callback);
-      //forEachNode(node.object, callback);
-      //forEachNode(node.body, callback);
-      break;
-
-    //case tokens.FOR:
-      //forEachNode(node.setup, callback);
-      //forEachNode(node.condition, callback);
-      //forEachNode(node.update, callback);
-      //forEachNode(node.body, callback);
-      break;
-
-    //case tokens.IF:
-      //forEachNode(node.condition, callback);
-      //forEachNode(node.thenPart, callback);
-      if (node.elsePart) {
-        //forEachNode(node.elsePart, callback);
-      }
-      break;
-
-    //case tokens.TRY:
-      //forEachNode(node.tryBlock, callback);
-      _.each(node.catchClauses, function(child) {
-        //forEachNode(child, callback);
-      });
-      if (node.finallyBlock) {
-        //forEachNode(node.finallyBlock, callback);
-      }
-      break;
-
-    //case tokens.CATCH:
-      if (node.guard) {
-        //forEachNode(node.guard, callback);
-      }
-      //forEachNode(node.block);
-      break;
-
-    case tokens.THROW:
-      return astIsEqual(node.exception, pattern.exception, variables);
-      break;
-
-    default:
-      console.error("jsgrep: Pattern type is not yet supported: " +
-        tokenString(node.type));
-      process.exit(1);
-      break;
-  }
-}
-
-function astMatchEllipsis(nodes, patterns, variables) {
-  // XXX(rpatterson): this needs testing!
-  const tokens = Narcissus.definitions.tokenIds;
-  var permitVar = true, clonedVars = null;
-  function go(i, j) {
-    if (i == nodes.length && j == patterns.length) {
-      return true;
-    }
-
-    if (j == patterns.length) {
-      return false;
-    }
-
-    if (patterns[j].type == tokens.ELLIPSIS && j == patterns.length - 1) {
-      return true;
-    }
-
-    if(i == nodes.length) {
-      return false;
-    }
-
-    if (patterns[j].type == tokens.ELLIPSIS) {
-      permitVar = false;
-      clonedVars = _.clone(variables);
-      return go(i, j + 1) || go(i + 1, j);
-    }
-
-    return astIsEqual(nodes[i], patterns[j],
-                      permitVar ? variables : clonedVars) &&
-      go(i + 1, j + 1);
-  }
-  var result = go(0, 0);
-  if (!permitVar && _.keys(clonedVars).length != _.keys(variables).length) {
-    // ..., A, ... is ambiguous, and if A was matched later in the pattern, we
-    // would have to backtrack to the ellipsis to try a different match. That's
-    // annoying.
-    //
-    // XXX(rpatterson): This incorrectly bails for (..., A)
-    console.error("jsgrep: Matching metavariables inside partially-matched " +
-      "lists is unsupported. Sorry!");
-    process.exit(1);
-  }
-  return result;
-}
-
-function forEachNode(node, callback) {
-  const tokens = Narcissus.definitions.tokenIds;
-
-  callback(node);
-
-  switch(node.type) {
-    // Core values
-    case tokens.FALSE:
-    case tokens.NULL:
-    case tokens.NUMBER:
-    case tokens.REGEXP:
-    case tokens.STRING:
-    case tokens.THIS:
-    case tokens.TRUE:
-    // 0-child statements
-    case tokens.BREAK:
-    case tokens.CONTINUE:
-      break;
-
-    // Unary expressions
-    case tokens.BITWISE_NOT:
-    case tokens.DECREMENT:
-    case tokens.INCREMENT:
-    case tokens.NEW:
-    case tokens.NEW_WITH_ARGS:
-    case tokens.NOT:
-    case tokens.TYPEOF:
-    case tokens.UNARY_MINUS:
-    case tokens.UNARY_PLUS:
-    case tokens.VOID:
-    // Binary expressions
-    case tokens.AND:
-    case tokens.BITWISE_AND:
-    case tokens.BITWISE_OR:
-    case tokens.BITWISE_XOR:
-    case tokens.DIV:
-    case tokens.EQ:
-    case tokens.GE:
-    case tokens.GT:
-    case tokens.IN:
-    case tokens.INSTANCEOF:
-    case tokens.LE:
-    case tokens.LSH:
-    case tokens.LT:
-    case tokens.MINUS:
-    case tokens.MOD:
-    case tokens.MUL:
-    case tokens.NE:
-    case tokens.OR:
-    case tokens.PLUS:
-    case tokens.RSH:
-    case tokens.STRICT_EQ:
-    case tokens.STRICT_NE:
-    case tokens.ULSH:
-    case tokens.URSH:
-    // Other
-    case tokens.ASSIGN:
-    case tokens.BLOCK:
-    case tokens.CALL:
-    case tokens.COMMA:
-    case tokens.CONST:
-    case tokens.DELETE:
-    case tokens.DOT:
-    case tokens.HOOK:
-    case tokens.INDEX:
-    case tokens.LET:
-    case tokens.VAR:
-    // Special
-    case tokens.ARRAY_INIT:
-    case tokens.LIST:
-    case tokens.OBJECT_INIT:
-    case tokens.PROPERTY_INIT:
-    case tokens.SCRIPT:
-      _.each(node.children, function(child) {
-        forEachNode(child, callback);
-      });
-      break;
-
-    case tokens.IDENTIFIER:
-      if (node.initializer) {
-        forEachNode(node.initializer, callback);
-      }
-      break;
-
-    case tokens.SEMICOLON:
-      if (node.expression) {
-        forEachNode(node.expression, callback);
-      }
-      break;
-
-    case tokens.DO:
-      forEachNode(node.body, callback);
-      forEachNode(node.condition, callback);
-      break;
-
-    case tokens.WHILE:
-      forEachNode(node.condition, callback);
-      forEachNode(node.body, callback);
-      break;
-
-    case tokens.FUNCTION:
-      forEachNode(node.body, callback);
-      break;
-
-    case tokens.RETURN:
-      if (node.value) {
-        forEachNode(node.value, callback);
-      }
-      break;
-
-    case tokens.SWITCH:
-      forEachNode(node.discriminant, callback);
-      _.each(node.cases, function(child) {
-        forEachNode(child, callback);
-      });
-      break;
-
-    case tokens.DEFAULT:
-      forEachNode(node.statements, callback);
-      break;
-
-    case tokens.CASE:
-      forEachNode(node.caseLabel, callback);
-      forEachNode(node.statements, callback);
-      break;
-
-    case tokens.LABEL:
-      forEachNode(node.statement, callback);
-      break;
-
-    case tokens.FOR_IN:
-      forEachNode(node.iterator, callback);
-      forEachNode(node.object, callback);
-      forEachNode(node.body, callback);
-      break;
-
-    case tokens.FOR:
-      if (node.setup) {
-        forEachNode(node.setup, callback);
-      }
-      if (node.condition) {
-        forEachNode(node.condition, callback);
-      }
-      if (node.update) {
-        forEachNode(node.update, callback);
-      }
-      forEachNode(node.body, callback);
-      break;
-
-    case tokens.IF:
-      forEachNode(node.condition, callback);
-      forEachNode(node.thenPart, callback);
-      if (node.elsePart) {
-        forEachNode(node.elsePart, callback);
-      }
-      break;
-
-    case tokens.TRY:
-      forEachNode(node.tryBlock, callback);
-      _.each(node.catchClauses, function(child) {
-        forEachNode(child, callback);
-      });
-      if (node.finallyBlock) {
-        forEachNode(node.finallyBlock, callback);
-      }
-      break;
-
-    case tokens.CATCH:
-      if (node.guard) {
-        forEachNode(node.guard, callback);
-      }
-      forEachNode(node.block, callback);
-      break;
-
-    case tokens.THROW:
-      forEachNode(node.exception, callback);
-      break;
-
-    default:
-      console.error(node.toString());
-      console.error("jsgrep: forEachNode: " +
-        node.tokenizer.filename + ":" + node.lineno +
-        ": Unimplemented node type");
-      process.exit(1);
-      break;
   }
 }
 
