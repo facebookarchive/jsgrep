@@ -47,7 +47,6 @@ the `-p` flag to print only a particular matched variable.
 ## TODO
 
 * Consider support for --where/--eval and/or not-patterns
-* Support for -l -L -n -h -H
 * Support for most statements in patterns
 
 ## Contributors

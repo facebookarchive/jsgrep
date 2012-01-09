@@ -6,14 +6,21 @@ var _ = require('underscore');
 var Narcissus = require('narcissus/main');
 
 /// Used to print the matching snippet rather than the first line of it.
-const PRINT_ONLY_MATCHING = ':root:';
+const PRINT_FIRST_LINE = 'first-line';
+const PRINT_ONLY_MATCHING = 'only-matching';
+const PRINT_METAVAR = 'metavar';
+const PRINT_FILES_NOT_MATCHING = 'files-not-matching';
+const PRINT_FILES_MATCHING = 'files-matching';
 
 var config = {
   patterns: [ ],
   paths: [ ],
-  print: false,
+  strictMatches: false,
+  print: PRINT_FIRST_LINE,
+  printMetavar: null,
+  lineNumber: false,
+  filename: null,
   dumpAst: false,
-  strictMatches: false
 };
 
 function usage(hasError) {
@@ -25,28 +32,28 @@ function usage(hasError) {
   console.log("");
   console.log("Usage: jsgrep [OPTIONS] PATTERN FILES...");
   console.log("");
-  console.log("Options:");
+  console.log("Search specifiers:");
+  console.log("  -e, --pattern=PATTERN     Pattern to search for. Multiples allowed.");
+  console.log("  -S, --strict-matches      Require exact matches for object initializers, etc.");
+  console.log("      --dump-ast            Dump the AST for the patterns and exit.");
   console.log("");
-  console.log("  -e, --pattern=PATTERN Pattern to search for. This must be valid JavaScript.");
-  console.log("                        Multiple patterns can be specified.");
-  console.log("");
-  console.log("  -o, --only-matching   Instead of printing the matching line, only print the");
-  console.log("                        matching pattern.");
-  console.log("");
-  console.log("  -p, --print=VAR       Instead of printing the matching line, print the");
-  console.log("                        matching metavariable.");
-  console.log("");
-  console.log("  -S, --strict-matches  Require strict matches for object initializers and");
-  console.log("                        blocks of statements.");
-  console.log("");
-  console.log("      --dump-ast        Instead of searching, dump the AST for the patterns.");
+  console.log("Output control:");
+  console.log("  -o, --only-matching       Print only the expression that matched.");
+  console.log("  -p, --print=VAR           Print only the named matching metavariable.");
+  console.log("  -n, --line-number         Print the line number with output lines.");
+  console.log("  -H, --with-filename       Print the filename for each match.");
+  console.log("  -h, --no-filename         Do not print the filename for each match.");
+  console.log("  -L, --files-without-match Only print file names with no matches.");
+  console.log("  -l, --files-with-matches  Only print file names with matches.");
   process.exit(0);
 }
 
 (function parseArgs() {
   var getopt = require('node-getopt');
   var parser = new getopt.BasicParser(
-    'e:(pattern)o(only-matching)p:(print)S(strict-matches)D(dump-ast)h(help)',
+    'e:(pattern)S(strict-matches)D(dump-ast)o(only-matching)p:(print)' +
+    'n(line-number)H(with-filename)h(no-filename)L(files-without-match)' +
+    'l(files-with-matches)_(help)',
     process.argv);
 
   while ((option = parser.getopt()) !== undefined) {
@@ -54,20 +61,36 @@ function usage(hasError) {
       case 'e':
         config.patterns.push(option.optarg);
         break;
-      case 'o':
-        config.print = PRINT_ONLY_MATCHING;
-        break;
-      case 'p':
-        config.print = option.optarg;
-        break;
       case 'S':
         config.strictMatches = true;
         break;
       case 'D':
         config.dumpAst = true;
         break;
+      case 'o':
+        config.print = PRINT_ONLY_MATCHING;
+        break;
+      case 'p':
+        config.print = PRINT_METAVAR;
+        config.printMetavar = option.optarg;
+        break;
+      case 'n':
+        config.lineNumber = true;
+        break;
+      case 'H':
+        config.filename = true;
+        break;
       case 'h':
+        config.filename = false;
+        break;
+      case 'L':
+        config.print = PRINT_FILES_NOT_MATCHING;
+        break;
+      case 'l':
+        config.print = PRINT_FILES_MATCHING;
+        break;
       case '?':
+      case '_':
         usage(option.error);
         break;
     }
@@ -83,6 +106,10 @@ if (config.patterns.length == 0 && config.paths.length > 0) {
 if (config.patterns.length == 0) {
   console.error("At least one pattern must be specified.");
   usage(true);
+}
+
+if (config.filename === null) {
+  config.filename = config.paths.length > 1;
 }
 
 var patternsAst = [];
@@ -112,6 +139,7 @@ if (config.dumpAst) {
 }
 
 for (var i = 0; i < config.paths.length; i++) {
+  var fileHasMatch = false;
   var source = fs.readFileSync(config.paths[i]).toString();
   // If the first character is a shebang, comment it out
   if (source.substr(0, 2) == '#!') {
@@ -124,22 +152,55 @@ for (var i = 0; i < config.paths.length; i++) {
     console.warn(e.message);
   }
 
-  forEachNode(ast, function(node) {
-    _.each(patternsAst, function(patternAst) {
-      var variables = {};
-      if (astIsEqual(node, patternAst, variables)) {
-        var output = sourceLines[node.lineno - 1];
-        if (config.print === PRINT_ONLY_MATCHING) {
-          output = node.tokenizer.source.substring(node.start, node.end);
-        } else if (config.print && variables[config.print]) {
-          var matchNode = variables[config.print];
-          output = matchNode.tokenizer.source.substring(
-            matchNode.start, matchNode.end);
+  try {
+    forEachNode(ast, function(node) {
+      _.each(patternsAst, function(patternAst) {
+        var variables = {};
+        if (astIsEqual(node, patternAst, variables)) {
+          var output = false, lineNumber = node.lineno;
+
+          fileHasMatch = true;
+
+          if (config.print === PRINT_FIRST_LINE) {
+            output = sourceLines[node.lineno - 1];
+          } else if (config.print === PRINT_ONLY_MATCHING) {
+            output = node.tokenizer.source.substring(node.start, node.end);
+          } else if (config.print === PRINT_METAVAR) {
+            if (!variables[config.printMetavar]) {
+              console.error("jsgrep: Metavariable " + config.printMetavar +
+                " is not bound to any expression.");
+              process.exit(1);
+            } else {
+              var matchNode = variables[config.printMetavar];
+              output = matchNode.tokenizer.source.substring(
+                matchNode.start, matchNode.end);
+              lineNumber = matchNode.lineno;
+            }
+          } else {
+            // Print filenames, so bail the search for speed
+            throw 'done';
+          }
+          if (output) {
+            if (output.indexOf('\n') > 0) {
+              output = output.substr(0, output.indexOf('\n'));
+            }
+            console.log((config.filename ? config.paths[i] + ":" : "") +
+                        (config.lineNumber ? lineNumber + ":" : "") +
+                        output);
+          }
         }
-        console.log(config.paths[i] + ": " + output);
-      }
+      });
     });
-  });
+  } catch(e) {
+    if (e !== 'done') {
+      throw e;
+    }
+  }
+
+  if (config.print == PRINT_FILES_NOT_MATCHING && !fileHasMatch ||
+      config.print == PRINT_FILES_MATCHING && fileHasMatch) {
+    console.log(config.paths[i]);
+  }
 }
 
 function tokenString(tt) {
