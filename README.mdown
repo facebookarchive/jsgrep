@@ -1,19 +1,10 @@
 # jsgrep: a syntactically-aware grep for JavaScript
 
-Jsgrep is program that allows you to search for a particular JavaScript pattern,
-using the abstract syntax tree (AST) of the program, which allows you to match
-for particular identifiers, string constants, function calls, etc., without
-having to be concerned with the whitespace of the original program.
+Jsgrep is program that searches for a particular JavaScript pattern using the
+abstract syntax tree (AST) of the program. This enables matching expressions
+based on their JavaScript meaning, rather than based on simple strings.
 
 ## Examples
-
-**Find all instances of a string constant**
-
-    $ ./jsgrep "'image'" tests/*.js
-    tests/jquery.js:            return elem.nodeName.toLowerCase() === "input" && "image" === elem.type;
-
-Jsgrep parses the query as JavaScript and uses that to compare against the
-target program, so the type of quote you search for does not matter.
 
 **Find calls to window.setTimeout with a 0 timeout**
 
@@ -21,31 +12,34 @@ target program, so the type of quote you search for does not matter.
     tests/jquery.js:        setTimeout( function() {
     tests/jquery.js:    setTimeout( clearFxNow, 0 );
 
-Because jsgrep is using the abstract syntax tree, it can identify that the
-particular call to `setTimeout` matches, even when it spans multiple lines
-and contains an inline function.
-
+Jsgrep uses metavariables as wildcards. Metavariables match any valid JavaScript
+chunk, so in this case, the first match was an entire inline function. In both
+cases, the second parameter to setTimeout was a literal value of 0.
 
 **Find value defaulting**
 
-    $ ./jsgrep "A = A || B;" tests/*.js
+    $ jsgrep "A = A || B;" tests/*.js
     tests/jquery.js:            args = args || [];
-    tests/jquery.js:            type = type || "fx";
-    tests/jquery.js:        type = type || "fx";
-    tests/jquery.js:    results = results || [];
-    tests/jquery.js:    context = context || document;
-    tests/jquery.js:        result = result || 1;
-    tests/jquery.js:    qualifier = qualifier || 0;
-    tests/jquery.js:        context = context || document;
     tests/jquery.js:    dataType = dataType || options.dataTypes[ 0 ];
 
 When the pattern references the same metavariable multiple times, jsgrep ensures
 that the value of the metavariable is the same throughout the match.
 
+**Find classes that have a 'path' property**
+
+    $ jsgrep -p C "JX.install(C, { properties: { path: X } })" tests/*.js
+    tests/javelin.js: 'Event'
+    tests/javelin.js: 'URI'
+
+Jsgrep allows you to search object initializations partially, which enables
+easily drilling into the structure of JavaScript classes. This example also uses
+the `-p` flag to print only a particular matched variable.
+
 ## TODO
 
 * Add support for ... to the parser
-* Add support for { asdf: value } patterns
+* Consider support for --where/--eval
+* Support for most statements in patterns
 
 ## Contributors
 

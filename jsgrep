@@ -12,7 +12,8 @@ var config = {
   patterns: [ ],
   paths: [ ],
   print: false,
-  dumpAst: false
+  dumpAst: false,
+  strictMatches: false
 };
 
 function usage(hasError) {
@@ -33,7 +34,10 @@ function usage(hasError) {
   console.log("                        matching pattern.");
   console.log("");
   console.log("  -p, --print=VAR       Instead of printing the matching line, print the");
-  console.log("                        matching variable.");
+  console.log("                        matching metavariable.");
+  console.log("");
+  console.log("  -S, --strict-matches  Require strict matches for object initializers and");
+  console.log("                        blocks of statements.");
   console.log("");
   console.log("      --dump-ast        Instead of searching, dump the AST for the patterns.");
   process.exit(0);
@@ -42,7 +46,7 @@ function usage(hasError) {
 (function parseArgs() {
   var getopt = require('node-getopt');
   var parser = new getopt.BasicParser(
-    'e:(pattern)o(only-matching)p:(print)D(dump-ast)h(help)',
+    'e:(pattern)o(only-matching)p:(print)S(strict-matches)D(dump-ast)h(help)',
     process.argv);
 
   while ((option = parser.getopt()) !== undefined) {
@@ -55,6 +59,9 @@ function usage(hasError) {
         break;
       case 'p':
         config.print = option.optarg;
+        break;
+      case 'S':
+        config.strictMatches = true;
         break;
       case 'D':
         config.dumpAst = true;
@@ -159,6 +166,32 @@ function astIsEqual(node, pattern, variables) {
     return false;
   }
 
+  if (node.type == tokens.OBJECT_INIT && !config.strictMatches) {
+    // Strict matching will be handled normally (below).
+    if (pattern.children.length > node.children.length) {
+      return false;
+    }
+
+    var keys = _.clone(pattern.children);
+    for (var i = 0; i < node.children.length; i++) {
+      for (var j = 0; j < keys.length;) {
+        if (astIsEqual(node.children[i], keys[j], variables)) {
+          keys.splice(j, 1);
+          break;
+        } else {
+          j++;
+        }
+      }
+
+      if (keys.length == 0) {
+        break;
+      }
+    }
+
+    // No keys left over -> match.
+    return keys.length == 0;
+  }
+
   switch(node.type) {
     // Core values
     case tokens.FALSE:
@@ -218,17 +251,15 @@ function astIsEqual(node, pattern, variables) {
     case tokens.ASSIGN:
     //case tokens.BLOCK:
     case tokens.CALL:
-    //case tokens.COMMA:
+    case tokens.COMMA:
     case tokens.DELETE:
     case tokens.DOT:
     case tokens.HOOK:
     case tokens.INDEX:
-    //case tokens.LET:
-    //case tokens.VAR:
     // Special
     case tokens.ARRAY_INIT: // TODO: handle ...
     case tokens.LIST: // TODO: handle ...
-    case tokens.OBJECT_INIT: // TODO: handle ... and partial object matching
+    case tokens.OBJECT_INIT: // TODO: handle ...
     case tokens.PROPERTY_INIT:
     //case tokens.SCRIPT:
       if (node.children.length == pattern.children.length) {
@@ -239,6 +270,48 @@ function astIsEqual(node, pattern, variables) {
         }
         return true;
       }
+      break;
+
+    case tokens.LET:
+    case tokens.VAR:
+      // All of var's children are IDENTIFIERs with name/initializer values
+      // TODO: this does not support destructuring assignments
+      if (pattern.children.length > node.children.length) {
+        return false;
+      }
+
+      var keys = _.clone(pattern.children);
+      for (var i = 0; i < node.children.length; i++) {
+        for (var j = 0; j < keys.length;) {
+          if (astIsEqual(node.children[i], keys[j], variables)) {
+            // If the pattern has an initializer, it must be equal to the one
+            // in the source.
+            if (keys[j].initializer &&
+               (!node.children[i].initializer ||
+                !astIsEqual(node.children[i].initializer,
+                            keys[j].initializer, variables))) {
+              return false;
+            }
+            // If in strict mode and the pattern has no initializer, neither can
+            // the source.
+            if (!keys[j].initializer && config.strictMatches &&
+                node.children[i].initializer) {
+              return false;
+            }
+            keys.splice(j, 1);
+            break;
+          } else {
+            j++;
+          }
+        }
+
+        if (keys.length == 0) {
+          break;
+        }
+      }
+
+      // No keys left over -> match.
+      return keys.length == 0;
       break;
 
     case tokens.SEMICOLON:
@@ -328,8 +401,8 @@ function astIsEqual(node, pattern, variables) {
       //forEachNode(node.block);
       break;
 
-    //case tokens.THROW:
-      //forEachNode(node.exception, callback);
+    case tokens.THROW:
+      return astIsEqual(node.exception, pattern.exception, variables);
       break;
 
     default:
