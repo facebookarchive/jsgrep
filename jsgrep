@@ -18,7 +18,7 @@ var config = {
 function usage(hasError) {
   if (hasError) {
     console.log("See jsgrep --help for usage information.");
-    process.exit(option.error ? 1 : 0);
+    process.exit(hasError ? 1 : 0);
   }
   console.log("jsgrep: Syntactically aware grep for JavaScript");
   console.log("");
