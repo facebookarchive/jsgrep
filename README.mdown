@@ -27,7 +27,7 @@ that the value of the metavariable is the same throughout the match.
 
 **Find the names of all invoked events**
 
-    $ ./jsgrep -p B "A.fire(B, ...)" tests/*.j
+    $ ./jsgrep -p B "A.fire(B, ...)" tests/*.js
     tests/connect.js: 'auth.logout'
     tests/connect.js: 'auth.login'
 
