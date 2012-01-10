@@ -46,8 +46,10 @@ the `-p` flag to print only a particular matched variable.
 
 ## TODO
 
+* Consider a metavar that matches but doesn't save, to prevent ambiguities.
 * Consider support for --where/--eval and/or not-patterns
 * Support for most statements in patterns
+* Testing
 
 ## Contributors
 
