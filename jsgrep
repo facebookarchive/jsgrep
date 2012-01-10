@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 
+var Narcissus = require('narcissus/main');
+var _ = require('underscore');
 var fs = require('fs');
 var path = require('path');
-var _ = require('underscore');
 
-var Narcissus = require('narcissus/main');
+var jsgrep = require('./lib/jsgrep.js');
 
 /// Used to print the matching snippet rather than the first line of it.
 const PRINT_FIRST_LINE = 'first-line';
@@ -126,10 +127,14 @@ function usage(hasError) {
   }
 })();
 
-var patternsAst = [];
-for (var i = 0; i < config.patterns.length; i++) {
-  patternsAst[i] =
-    require('./lib/jsgrep.js').Matcher.compilePattern(config.patterns[i]);
+try {
+  var patternsAst = [];
+  for (var i = 0; i < config.patterns.length; i++) {
+    patternsAst[i] = jsgrep.Matcher.compilePattern(config.patterns[i]);
+  }
+} catch(e) {
+  console.error(e.name + ": " + e.message);
+  process.exit(1);
 }
 
 if (config.dumpAst) {
@@ -156,12 +161,12 @@ function doFile(filename) {
   try {
     var ast = Narcissus.parser.parse(source, filename, 1);
   } catch(e) {
-    console.warn(e.message);
+    console.warn(e.name + ": " + e.message);
     return;
   }
 
   try {
-    require('./lib/jsgrep.js').jsgrep({
+    jsgrep.jsgrep({
       source: ast,
       patterns: patternsAst,
       matchScript: config.matchScript,
