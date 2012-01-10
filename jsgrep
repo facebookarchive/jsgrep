@@ -14,9 +14,10 @@ const PRINT_FILES_NOT_MATCHING = 'files-not-matching';
 const PRINT_FILES_MATCHING = 'files-matching';
 
 var config = {
-  patterns: [ ],
   paths: [ ],
   recursive: false,
+  patterns: [ ],
+  matchScript: false,
   strictMatches: false,
   print: PRINT_FIRST_LINE,
   printMetavar: null,
@@ -36,6 +37,7 @@ function usage(hasError) {
   console.log("");
   console.log("Search specifiers:");
   console.log("  -e, --pattern=PATTERN     Pattern to search for. Multiples allowed.");
+  console.log("  -f, --match-script=FILE   Path to match script.");
   console.log("  -S, --strict-matches      Require exact matches for object initializers, etc.");
   console.log("");
   console.log("Output control:");
@@ -56,8 +58,8 @@ function usage(hasError) {
 (function parseArgs() {
   var getopt = require('node-getopt');
   var parser = new getopt.BasicParser(
-    'e:(pattern)S(strict-matches)o(only-matching)p:(print)n(line-number)' +
-    'H(with-filename)h(no-filename)L(files-without-match)' +
+    'e:(pattern)f:(match-script)S(strict-matches)o(only-matching)p:(print)' +
+    'n(line-number)H(with-filename)h(no-filename)L(files-without-match)' +
     'l(files-with-matches)r(recursive)D(dump-ast)_(help)',
     process.argv);
 
@@ -65,6 +67,9 @@ function usage(hasError) {
     switch(option.option) {
       case 'e':
         config.patterns.push(option.optarg);
+        break;
+      case 'f':
+        config.matchScript = option.optarg;
         break;
       case 'S':
         config.strictMatches = true;
@@ -107,13 +112,13 @@ function usage(hasError) {
 
   config.paths = process.argv.slice(parser.optind());
 
-  if (config.patterns.length == 0 && config.paths.length > 0) {
-    config.patterns.push(config.paths.shift());
-  }
-
-  if (config.patterns.length == 0) {
-    console.error("At least one pattern must be specified.");
-    usage(true);
+  if (config.patterns.length == 0 && !config.matchScript) {
+    if (config.paths.length > 0) {
+      config.patterns.push(config.paths.shift());
+    } else {
+      console.error("At least one pattern must be specified.");
+      usage(true);
+    }
   }
 
   if (config.filename === null) {
@@ -123,20 +128,8 @@ function usage(hasError) {
 
 var patternsAst = [];
 for (var i = 0; i < config.patterns.length; i++) {
-  var pattern = config.patterns[i];
-  var patternAst = Narcissus.parser.parse(pattern, 'pattern', 0);
-  if (patternAst.children.length == 1) {
-    // Discard the script node
-    patternAst = patternAst.children[0];
-  }
-
-  if (patternAst.type == Narcissus.definitions.tokenIds.SEMICOLON &&
-      pattern.substr(pattern.length - 1) != ';') {
-    // Searching for single expression, discard the semicolon node
-    patternAst = patternAst.expression;
-  }
-
-  patternsAst[i] = patternAst;
+  patternsAst[i] =
+    require('./lib/jsgrep.js').Matcher.compilePattern(config.patterns[i]);
 }
 
 if (config.dumpAst) {
@@ -171,6 +164,7 @@ function doFile(filename) {
     require('./lib/jsgrep.js').jsgrep({
       source: ast,
       patterns: patternsAst,
+      matchScript: config.matchScript,
       strictMatches: config.strictMatches,
       callback: function(node, variables) {
         var output = false, lineNumber = node.lineno;
