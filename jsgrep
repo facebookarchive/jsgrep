@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 var fs = require('fs');
+var path = require('path');
 var _ = require('underscore');
 
 var Narcissus = require('narcissus/main');
@@ -15,6 +16,7 @@ const PRINT_FILES_MATCHING = 'files-matching';
 var config = {
   patterns: [ ],
   paths: [ ],
+  recursive: false,
   strictMatches: false,
   print: PRINT_FIRST_LINE,
   printMetavar: null,
@@ -35,7 +37,6 @@ function usage(hasError) {
   console.log("Search specifiers:");
   console.log("  -e, --pattern=PATTERN     Pattern to search for. Multiples allowed.");
   console.log("  -S, --strict-matches      Require exact matches for object initializers, etc.");
-  console.log("      --dump-ast            Dump the AST for the patterns and exit.");
   console.log("");
   console.log("Output control:");
   console.log("  -o, --only-matching       Print only the expression that matched.");
@@ -45,15 +46,19 @@ function usage(hasError) {
   console.log("  -h, --no-filename         Do not print the filename for each match.");
   console.log("  -L, --files-without-match Only print file names with no matches.");
   console.log("  -l, --files-with-matches  Only print file names with matches.");
+  console.log("");
+  console.log("Miscellaneous:");
+  console.log("  -r, --recursive           Scan directories for JavaScript files.");
+  console.log("      --dump-ast            Dump the AST for the patterns and exit.");
   process.exit(0);
 }
 
 (function parseArgs() {
   var getopt = require('node-getopt');
   var parser = new getopt.BasicParser(
-    'e:(pattern)S(strict-matches)D(dump-ast)o(only-matching)p:(print)' +
-    'n(line-number)H(with-filename)h(no-filename)L(files-without-match)' +
-    'l(files-with-matches)_(help)',
+    'e:(pattern)S(strict-matches)o(only-matching)p:(print)n(line-number)' +
+    'H(with-filename)h(no-filename)L(files-without-match)' +
+    'l(files-with-matches)r(recursive)D(dump-ast)_(help)',
     process.argv);
 
   while ((option = parser.getopt()) !== undefined) {
@@ -63,9 +68,6 @@ function usage(hasError) {
         break;
       case 'S':
         config.strictMatches = true;
-        break;
-      case 'D':
-        config.dumpAst = true;
         break;
       case 'o':
         config.print = PRINT_ONLY_MATCHING;
@@ -88,6 +90,13 @@ function usage(hasError) {
         break;
       case 'l':
         config.print = PRINT_FILES_MATCHING;
+        break;
+      case 'r':
+        config.recursive = true;
+        config.filename = true;
+        break;
+      case 'D':
+        config.dumpAst = true;
         break;
       case '?':
       case '_':
@@ -138,9 +147,9 @@ if (config.dumpAst) {
   process.exit(0);
 }
 
-for (var i = 0; i < config.paths.length; i++) {
+function doFile(filename) {
   var fileHasMatch = false;
-  var source = fs.readFileSync(config.paths[i]).toString();
+  var source = fs.readFileSync(filename).toString();
   // If the first character is a shebang, comment it out
   if (source.substr(0, 2) == '#!') {
     source = "// " + source;
@@ -152,9 +161,10 @@ for (var i = 0; i < config.paths.length; i++) {
   }
 
   try {
-    var ast = Narcissus.parser.parse(source, config.paths[i], 1);
+    var ast = Narcissus.parser.parse(source, filename, 1);
   } catch(e) {
     console.warn(e.message);
+    return;
   }
 
   try {
@@ -191,7 +201,7 @@ for (var i = 0; i < config.paths.length; i++) {
           if (output.indexOf('\n') > 0) {
             output = output.substr(0, output.indexOf('\n'));
           }
-          console.log((config.filename ? config.paths[i] + ":" : "") +
+          console.log((config.filename ? filename + ":" : "") +
                       (config.lineNumber ? lineNumber + ":" : "") +
                       output);
         }
@@ -209,7 +219,29 @@ for (var i = 0; i < config.paths.length; i++) {
 
   if (config.print == PRINT_FILES_NOT_MATCHING && !fileHasMatch ||
       config.print == PRINT_FILES_MATCHING && fileHasMatch) {
-    console.log(config.paths[i]);
+    console.log(filename);
+  }
+}
+
+function doDirectory(directory) {
+  var files = fs.readdirSync(directory);
+  for (var i = 0; i < files.length; i++) {
+    var filePath = path.join(directory, files[i]);
+    var stat = fs.statSync(filePath);
+    if (stat.isDirectory()) {
+      doDirectory(filePath);
+    } else if (filePath.substr(-3) == ".js") {
+      doFile(filePath);
+    }
+  }
+}
+
+for (var i = 0; i < config.paths.length; i++) {
+  var stat = fs.statSync(config.paths[i]);
+  if (stat.isDirectory()) {
+    doDirectory(config.paths[i]);
+  } else {
+    doFile(config.paths[i]);
   }
 }
 
