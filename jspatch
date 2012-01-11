@@ -1,0 +1,139 @@
+#!/usr/bin/env node
+
+var Narcissus = require('narcissus/main');
+var _ = require('underscore');
+var fs = require('fs');
+var path = require('path');
+
+var jsgrep = require('./lib/jsgrep.js');
+
+var config = {
+  paths: [ ],
+  recursive: false,
+  patchFile: false,
+};
+
+function usage(hasError) {
+  if (hasError) {
+    console.log("See jspatch --help for usage information.");
+    process.exit(hasError ? 1 : 0);
+  }
+  console.log("jspatch: JavaScript source code refactoring tool");
+  console.log("");
+  console.log("Usage: jspatch [OPTIONS] PATCHFILE FILES...");
+  console.log("");
+  console.log("Options:");
+  console.log("  -f, --patch-script=FILE   Path to patch script.");
+  console.log("  -r, --recursive           Scan directories for JavaScript files.");
+  process.exit(0);
+}
+
+(function parseArgs() {
+  var getopt = require('node-getopt');
+  var parser = new getopt.BasicParser(
+    'f:(match-script)r(recursive)_(help)',
+    process.argv);
+
+  while ((option = parser.getopt()) !== undefined) {
+    switch(option.option) {
+      case 'f':
+        config.patchFile = option.optarg;
+        break;
+      case 'r':
+        config.recursive = true;
+        break;
+      case '?':
+      case '_':
+        usage(option.error);
+        break;
+    }
+  }
+
+  config.paths = process.argv.slice(parser.optind());
+
+  if (!config.patchFile) {
+    if (config.paths.length > 0) {
+      config.patchFile = config.paths.shift();
+    } else {
+      console.error("jspatch: Must specify a patch file.");
+      usage(true);
+    }
+  }
+})();
+
+var patchSource = fs.readFileSync(config.patchFile).toString();
+// Validate patch file before evaling
+try {
+  var patchAst =
+    Narcissus.parser.parse(patchSource, config.patchFile, 1);
+} catch(e) {
+  console.error("jspatch: " + e.name + ": " + e.message);
+  process.exit(1);
+}
+var matchFn = eval("(function custom_matcher(jsgrep) {" + patchSource + "})");
+
+function doFile(filename) {
+  var source = fs.readFileSync(filename).toString();
+  // If the first character is a shebang, comment it out
+  if (source.substr(0, 2) == '#!') {
+    source = "// " + source;
+  }
+
+  try {
+    var ast = Narcissus.parser.parse(source, filename, 1);
+  } catch(e) {
+    console.warn(e.name + ": " + e.message);
+    return;
+  }
+
+  try {
+    jsgrep.jsgrep({
+      source: ast,
+      matchScript: matchFn,
+      callback: function(node, variables) {
+      }
+    });
+  } catch(e) {
+    if (!(e instanceof Error) && e.message) {
+      console.error("jspatch: " + e.message);
+      process.exit(1);
+    }
+    throw e;
+  }
+
+  var modifiedSource = ast.tokenizer.source;
+  if (source.substr(0, 4) == '//#!') {
+    // Now remove the command form the shebang
+    source = source.substr(2);
+    modifiedSource = modifiedSource.substr(2);
+  }
+
+  console.log(modifiedSource);
+}
+
+function doDirectory(directory) {
+  if (!config.recursive) {
+    return;
+  }
+  var files = fs.readdirSync(directory);
+  for (var i = 0; i < files.length; i++) {
+    var filePath = path.join(directory, files[i]);
+    var stat = fs.statSync(filePath);
+    if (stat.isDirectory()) {
+      doDirectory(filePath);
+    } else if (filePath.substr(-3) == ".js") {
+      doFile(filePath);
+    }
+  }
+}
+
+for (var i = 0; i < config.paths.length; i++) {
+  var stat = fs.statSync(config.paths[i]);
+  if (stat.isDirectory()) {
+    doDirectory(config.paths[i]);
+  } else {
+    doFile(config.paths[i]);
+  }
+}
+
+// vim: ft=javascript

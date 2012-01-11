@@ -223,6 +223,10 @@ function doFile(filename) {
 }
 
 function doDirectory(directory) {
+  if (!config.recursive) {
+    console.warn("jsgrep: ignoring directory without -r");
+    return;
+  }
   var files = fs.readdirSync(directory);
   for (var i = 0; i < files.length; i++) {
     var filePath = path.join(directory, files[i]);

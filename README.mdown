@@ -32,7 +32,8 @@ that the value of the metavariable is the same throughout the match.
     tests/connect.js: 'auth.login'
 
 The `...` operator matches 0 or more expressions in function calls and array
-initializers.
+initializers. This example also uses the `-p` flag to print only a particular
+matched variable.
 
 **Find classes that have a 'path' property**
 
@@ -41,15 +42,14 @@ initializers.
     tests/javelin.js: 'URI'
 
 Jsgrep allows you to search object initializations partially, which enables
-easily drilling into the structure of JavaScript classes. This example also uses
-the `-p` flag to print only a particular matched variable.
+easily drilling into the structure of JavaScript classes.
 
 ## TODO
 
 * Consider a metavar that matches but doesn't save, to prevent ambiguities.
 * Consider support for --where/--eval and/or not-patterns
 * Support for most statements in patterns
-* Testing
+* Formally testing the pattern matchers
 
 ## Contributors
 
