@@ -2,6 +2,7 @@
 
 var Narcissus = require('narcissus/main');
 var _ = require('underscore');
+var child_process = require('child_process');
 var fs = require('fs');
 var path = require('path');
 
@@ -72,18 +73,55 @@ try {
 }
 var matchFn = eval("(function custom_matcher(jsgrep) {" + patchSource + "})");
 
-function doFile(filename) {
+function generateDiff(oldFilename, newFile, callback) {
+  var tempFilename, tries = 1;
+  do {
+    tempFilename = path.join(process.env.TEMP || "/tmp",
+      "jspatch." + path.basename(oldFilename, ".js") +
+      (tries == 1 ? "" : ("." + tries)) + ".js");
+    tries++;
+  } while (path.existsSync(tempFilename));
+
+  var tempFile = fs.openSync(tempFilename, 'w');
+  try {
+    fs.writeSync(tempFile, newFile);
+  } finally {
+    fs.closeSync(tempFile);
+  }
+
+  var child =
+    child_process.spawn('diff', [ '-u', oldFilename, tempFilename ]);
+
+  child.stdout.on('data', function(data) {
+    process.stdout.write(data);
+  });
+  child.stderr.on('data', function(data) {
+    process.stderr.write(data);
+  });
+
+  child.on('exit', function(code) {
+    fs.unlinkSync(tempFilename);
+    if (code !== 0 && code !== 1) {
+      // diff returns 0 for no differences, 1 for differences, 2 for error
+      console.error('jspatch: diff exited with code ' + code);
+      process.exit(1);
+    }
+    callback();
+  });
+}
+
+function doFile(filename, callback) {
   var source = fs.readFileSync(filename).toString();
   // If the first character is a shebang, comment it out
   if (source.substr(0, 2) == '#!') {
-    source = "// " + source;
+    source = "//" + source;
   }
 
   try {
     var ast = Narcissus.parser.parse(source, filename, 1);
   } catch(e) {
     console.warn(e.name + ": " + e.message);
-    return;
+    return callback();
   }
 
   try {
@@ -102,16 +140,29 @@ function doFile(filename) {
   }
 
   var modifiedSource = ast.tokenizer.source;
+
+  // Try to parse the modified source
+  try {
+    Narcissus.parser.parse(modifiedSource, 'modified source', 1);
+  } catch(e) {
+    console.log('jspatch: ' + filename +
+      ': warning: modifications resulted in an invalid JavaScript file!');
+    console.log('This is probably a bug in jspatch. ' +
+      'Please let ry@fb.com know!');
+  }
+
   if (source.substr(0, 4) == '//#!') {
-    // Now remove the command form the shebang
+    // Now remove the comment from the shebang
     source = source.substr(2);
     modifiedSource = modifiedSource.substr(2);
   }
 
-  console.log(modifiedSource);
+  generateDiff(filename, modifiedSource, callback);
 }
 
-function doDirectory(directory) {
+var paths = config.paths;
+
+function queueDirectory(directory) {
   if (!config.recursive) {
     return;
   }
@@ -119,21 +170,28 @@ function doDirectory(directory) {
   for (var i = 0; i < files.length; i++) {
     var filePath = path.join(directory, files[i]);
     var stat = fs.statSync(filePath);
-    if (stat.isDirectory()) {
-      doDirectory(filePath);
-    } else if (filePath.substr(-3) == ".js") {
-      doFile(filePath);
+    if (stat.isDirectory() ||
+        filePath.substr(-3) == ".js") {
+      paths.push(filePath);
     }
   }
 }
 
-for (var i = 0; i < config.paths.length; i++) {
-  var stat = fs.statSync(config.paths[i]);
+function jspatch_loop() {
+  if (paths.length == 0) {
+    return;
+  }
+
+  var nextPath = paths.shift();
+  var stat = fs.statSync(nextPath);
   if (stat.isDirectory()) {
-    doDirectory(config.paths[i]);
+    queueDirectory(nextPath);
+    return jspatch_loop();
   } else {
-    doFile(config.paths[i]);
+    doFile(nextPath, jspatch_loop);
   }
 }
+
+jspatch_loop();
 
 // vim: ft=javascript
