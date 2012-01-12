@@ -112,7 +112,7 @@ function processPatch(patchSource, patchFilename) {
         filename: chunk.filename,
         lineNumber: chunk.lineNumber
       };
-      var matches = ast.find(chunk.find, function(v) {
+      var matches = ast.findStrict(chunk.find, function(v) {
         v.node.applyPatch(chunk.patch, patchFilename, chunk.lineNumber);
       }, matchOptions);
     });

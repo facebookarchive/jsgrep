@@ -5,8 +5,26 @@ var c;
 
 var obj = {
   one: 'yes',
-  two: 'no'
+  two: 'no',
+  extend: a,
+  ready: function() {
+    var lol = /^[\+(\-]?\d+/;
+  }
 };
+
+if (__DEV__) {
+  console.log('development version!');
+} else {
+  console.log('production version!');
+}
+
+// -----
+
+if (__DEV__) {
+  obj['yes'] = 'very yes';
+}
+
+foo(1, 'no', 'way');
 
 obj['yes'] = obj['yes'];
 
