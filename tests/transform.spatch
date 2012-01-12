@@ -1,0 +1,12 @@
+ JX.install(N, {
+   ...,
+-  properties : {
++  members : {
+     ...
++    ,
+-  },
+-  members : {
+     ...
+   },
+   ...
+ })

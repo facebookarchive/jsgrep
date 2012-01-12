@@ -44,7 +44,6 @@ matched variable.
 Jsgrep allows you to search object initializations partially, which enables
 easily drilling into the structure of JavaScript classes.
 
-
 ## jspatch
 
 Jsgrep allows you to identify source code that resembles a certain pattern.
@@ -53,7 +52,7 @@ original source code.
 
 **Replace setTimeout with window.setTimeout**
 
-    $ ./jspatch -e 's/setTimeout( A, B )/window.setTimeout( A, B )/' tests/jquery.js
+    $ jspatch -e 's/setTimeout( A, B )/window.setTimeout( A, B )/' tests/jquery.js
     --- tests/jquery.js 2012-01-10 14:51:36.000000000 -0800
     +++ /tmp/jspatch.jquery.js  2012-01-11 17:13:56.000000000 -0800
     @@ -420,7 +420,7 @@
@@ -77,16 +76,61 @@ original source code.
 
 Sed mode allows you to quickly perform simple substitutions on the source code.
 
+**Refactor properties/members into just properties**
+
+    $ cat tests/transform.spatch
+     JX.install(N, {
+       ...,
+    -  properties : {
+    +  members : {
+         ...
+    +    ,
+    -  },
+    -  members : {
+         ...
+       },
+       ...
+     })
+
+    $ jspatch -f tests/transform.spatch tests/javelin.js
+    --- tests/javelin.js    2012-01-08 10:55:04.000000000 -0800
+    +++ /tmp/jspatch.javelin.js 2012-01-12 03:06:45.000000000 -0800
+    @@ -3615,16 +3615,14 @@
+         }
+       },
+
+    -  properties : {
+    +  members : {
+         protocol: undefined,
+         port: undefined,
+         path: undefined,
+         queryParams: undefined,
+         fragment: undefined,
+    -    querySerializer: undefined
+    -  },
+    -
+    -  members : {
+    +    querySerializer: undefined,
+    +
+         _domain: undefined,
+
+         /**
+
+This complex spatch file leverages the fact that properties and members are
+always adjacent to one another in the source. This could be verified using
+jsgrep to ensure that no cases were missed.
+
 ## TODO
 
 * Consider a metavar that matches but doesn't save, to prevent ambiguities.
+* Rewrite forEachNode to be iterative rather than recursive (to fix ...)
 * Consider support for --where/--eval and/or not-patterns
 * Support for most statements in patterns
 * Formally testing the pattern matchers
 
 jspatch:
 
-* Make the substitution work at the tokenizer level rather than the AST level.
+* Testing
 
 ## Contributors
 
