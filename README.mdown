@@ -44,12 +44,49 @@ matched variable.
 Jsgrep allows you to search object initializations partially, which enables
 easily drilling into the structure of JavaScript classes.
 
+
+## jspatch
+
+Jsgrep allows you to identify source code that resembles a certain pattern.
+Jspatch is a tool to take that information and programmatically modify the
+original source code.
+
+**Replace setTimeout with window.setTimeout**
+
+    $ ./jspatch -e 's/setTimeout( A, B )/window.setTimeout( A, B )/' tests/jquery.js
+    --- tests/jquery.js 2012-01-10 14:51:36.000000000 -0800
+    +++ /tmp/jspatch.jquery.js  2012-01-11 17:13:56.000000000 -0800
+    @@ -420,7 +420,7 @@
+            if ( (wait === true && !--jQuery.readyWait) || (wait !== true && !jQuery.isReady) ) {
+                // Make sure body exists, at least, in case IE gets a little overzealous (ticket #5443).
+                if ( !document.body ) {
+    -               return setTimeout( jQuery.ready, 1 );
+    +               return window.setTimeout( jQuery.ready, 1 );
+                }
+
+                // Remember that the DOM is ready
+    @@ -1987,7 +1987,7 @@
+            ( src === "mark" || !jQuery._data(elem, markDataKey) ) ) {
+            // Give room for hard-coded callbacks to fire first
+            // and eventually mark/queue something else on the element
+    -       setTimeout( function() {
+    +       window.setTimeout( function() {
+                if ( !jQuery._data( elem, queueDataKey ) &&
+                    !jQuery._data( elem, markDataKey ) ) {
+                    jQuery.removeData( elem, deferDataKey, true );
+
+Sed mode allows you to quickly perform simple substitutions on the source code.
+
 ## TODO
 
 * Consider a metavar that matches but doesn't save, to prevent ambiguities.
 * Consider support for --where/--eval and/or not-patterns
 * Support for most statements in patterns
 * Formally testing the pattern matchers
+
+jspatch:
+
+* Make the substitution work at the tokenizer level rather than the AST level.
 
 ## Contributors
 

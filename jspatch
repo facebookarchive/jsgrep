@@ -12,6 +12,7 @@ var config = {
   paths: [ ],
   recursive: false,
   patchFile: false,
+  sedMode: false,
   asJavascript: false
 };
 
@@ -27,6 +28,7 @@ function usage(hasError) {
   console.log("Options:");
   console.log("  -f, --patch-script=FILE   Path to patch script.");
   console.log("  -J, --javascript          Interpret PATCHFILE as a match script.");
+  console.log("  -e, --expression=SCRIPT   Sed mode. SCRIPT is in the form of s/A/B/");
   console.log("  -r, --recursive           Scan directories for JavaScript files.");
   process.exit(0);
 }
@@ -34,7 +36,7 @@ function usage(hasError) {
 (function parseArgs() {
   var getopt = require('node-getopt');
   var parser = new getopt.BasicParser(
-    'f:(match-script)J(javascript)r(recursive)_(help)',
+    'f:(match-script)J(javascript)e:(expression)r(recursive)_(help)',
     process.argv);
 
   while ((option = parser.getopt()) !== undefined) {
@@ -44,6 +46,9 @@ function usage(hasError) {
         break;
       case 'J':
         config.asJavascript = true;
+        break;
+      case 'e':
+        config.sedMode = option.optarg;
         break;
       case 'r':
         config.recursive = true;
@@ -57,7 +62,7 @@ function usage(hasError) {
 
   config.paths = process.argv.slice(parser.optind());
 
-  if (!config.patchFile) {
+  if (!config.patchFile && !config.sedMode) {
     if (config.paths.length > 0) {
       config.patchFile = config.paths.shift();
     } else {
@@ -73,60 +78,74 @@ var matchFn;
 function processPatch(patchSource) {
   var lines = patchSource.split('\n');
 
-  var inReplacement = false;
-  var topPattern = [];
-  var find = [];
-  var replace = [];
+  var i = 0;
+  var chunks = [];
 
-  for (var i = 0; i < lines.length; i++) {
-    if (lines[i][0] == '-') {
-      if (!inReplacement) {
-        if (find.length > 0) {
-          // XXX: due to the way I compile the patch, each replacement would be
-          // independent of one another, which would be confusing.
-          console.error('jspatch: Only 1 replacement is permitted per chunk.');
-          process.exit(1);
+  function processChunk() {
+    var chunk = { top: [], find: [], replace: [] };
+    var inReplacement = false;
+
+    for(; i < lines.length; i++) {
+      if (lines[i] == '---') {
+        break;
+      } else if (lines[i][0] == '-') {
+        if (!inReplacement) {
+          if (chunk.find.length > 0) {
+            // XXX: due to the way I compile the patch, each replacement would be
+            // independent of one another, which would be confusing.
+            console.error('jspatch: Only 1 replacement is permitted per chunk.');
+            process.exit(1);
+          }
+          inReplacement = true;
+          chunk.top.push('A_jspatchAutovar');
         }
-        inReplacement = true;
-        topPattern.push('A_jspatchAutovar');
-      } else {
-        topPattern.push('');
-      }
-      find.push(lines[i].substr(1));
+        chunk.find.push(lines[i].substr(1));
 
-    } else if (lines[i][0] == '+') {
-      if (!inReplacement) {
-        console.error(
-          'jspatch: Insertions are not yet supported, only replacements.');
-        process.exit(1);
-      }
-      topPattern.push('');
-      replace.push(lines[i].substr(1));
-
-    } else {
-      if (inReplacement) {
-        if (replace.length == 0) {
+      } else if (lines[i][0] == '+') {
+        if (!inReplacement) {
           console.error(
-            'jspatch: Removals are not yet supported, only replacements.');
+            'jspatch: Insertions are not yet supported, only replacements.');
           process.exit(1);
         }
-        inReplacement = false;
+        chunk.replace.push(lines[i].substr(1));
+
+      } else {
+        if (inReplacement) {
+          if (chunk.replace.length == 0) {
+            console.error(
+              'jspatch: Removals are not yet supported, only replacements.');
+            process.exit(1);
+          }
+          inReplacement = false;
+        }
+        chunk.top.push(lines[i]);
       }
-      topPattern.push(lines[i]);
     }
+
+    chunk.top = chunk.top.join('\n');
+    chunk.find = chunk.find.join('\n');
+    chunk.replace = chunk.replace.join('\n');
+
+    chunks.push(chunk);
   }
 
-  topPattern = topPattern.join('\n');
-  find = find.join('\n');
-  replace = replace.join('\n');
+  while (i < lines.length) {
+    processChunk();
+  }
 
-  return function(jsgrep) {
-    jsgrep.find(topPattern, function(vars) {
-      vars.A_jspatchAutovar.match(find, function(vars) {
-        vars.node.replaceWith(replace);
+  function generateMatchFn(chunks) {
+    return function(jsgrep) {
+      _.each(chunks, function(chunk) {
+        jsgrep.find(chunk.top, function(vars) {
+          vars.A_jspatchAutovar.match(chunk.find, function(vars) {
+            vars.node.replaceWith(chunk.replace);
+          });
+        });
       });
-    });
-  };
+    };
+  }
+
+  return generateMatchFn(chunks);
 }
 
 function generateDiff(oldFilename, newFile, callback) {
@@ -246,7 +265,18 @@ function jspatch_loop() {
   }
 }
 
-if (config.asJavascript) {
+if (config.sedMode) {
+  // XXX hurr hurr can't sed mode division, paths in string literals, blah blah
+  var sedMode = config.sedMode.split('/');
+  if (sedMode.length != 4 || sedMode[0] != 's' || sedMode[3] != '') {
+    console.error('jspatch: Pattern for sed mode must be in the form of ' +
+      '"s/search/replace/".');
+    process.exit(1);
+  }
+  matchFn = function(jsgrep) {
+    jsgrep.replaceAll(sedMode[1], sedMode[2]);
+  };
+} else if (config.asJavascript) {
   matchFn = config.patchFile;
 } else {
   var patchSource = fs.readFileSync(config.patchFile).toString();
