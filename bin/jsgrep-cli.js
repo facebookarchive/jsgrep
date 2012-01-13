@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 
-var Narcissus = require('narcissus/main');
+var Narcissus = require('narcissus');
 var _ = require('underscore');
 var fs = require('fs');
 var path = require('path');
 
-var jsgrep = require('./lib/jsgrep.js');
+var jsgrep = require('../lib/jsgrep.js');
 
 /// Used to print the matching snippet rather than the first line of it.
 const PRINT_FIRST_LINE = 'first-line';
@@ -52,16 +52,23 @@ function usage(hasError) {
   console.log("");
   console.log("Miscellaneous:");
   console.log("  -r, --recursive           Scan directories for JavaScript files.");
+  console.log("  -V, --version             Show version information.");
   console.log("      --dump-ast            Dump the AST for the patterns and exit.");
   process.exit(0);
 }
 
+function version() {
+  var package = JSON.parse(fs.readFileSync(__dirname + '/../package.json'));
+  console.log("jsgrep " + package.version);
+  process.exit(0);
+}
+
 (function parseArgs() {
-  var getopt = require('node-getopt');
+  var getopt = require('posix-getopt');
   var parser = new getopt.BasicParser(
     'e:(pattern)f:(match-script)S(strict-matches)o(only-matching)p:(print)' +
     'n(line-number)H(with-filename)h(no-filename)L(files-without-match)' +
-    'l(files-with-matches)r(recursive)D(dump-ast)_(help)',
+    'l(files-with-matches)r(recursive)V(version)D(dump-ast)_(help)',
     process.argv);
 
   while ((option = parser.getopt()) !== undefined) {
@@ -100,6 +107,9 @@ function usage(hasError) {
       case 'r':
         config.recursive = true;
         config.filename = true;
+        break;
+      case 'V':
+        version();
         break;
       case 'D':
         config.dumpAst = true;

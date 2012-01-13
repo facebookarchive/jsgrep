@@ -1,0 +1,29 @@
+{
+  "name": "jsgrep",
+  "version": "1.0.0-alpha" ,
+  "private": true,
+  "description": "Syntactically-aware grep for JavaScript",
+  "homepage": "https://github.com/facebook/jsgrep",
+  "author": "Ryan Patterson <ry@fb.com>",
+  "preferGlobal": true,
+
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/facebook/jsgrep.git"
+  },
+
+  "main": "./lib/jsgrep.js",
+  "bin": {
+    "jsgrep": "./bin/jsgrep-cli.js",
+    "jspatch": "./bin/jspatch-cli.js"
+  },
+
+  "dependencies": {
+    "posix-getopt": "0",
+    "underscore": "1"
+  },
+
+  "bundledDependencies": [
+    "narcissus"
+  ]
+}

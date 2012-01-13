@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 
-var Narcissus = require('narcissus/main');
+var Narcissus = require('narcissus');
 var _ = require('underscore');
 var child_process = require('child_process');
 var fs = require('fs');
 var path = require('path');
 
-var jsgrep = require('./lib/jsgrep.js');
+var jsgrep = require('../lib/jsgrep.js');
 
 var config = {
   paths: [ ],
@@ -30,13 +30,20 @@ function usage(hasError) {
   console.log("  -J, --javascript          Interpret PATCHFILE as a match script.");
   console.log("  -e, --expression=SCRIPT   Sed mode. SCRIPT is in the form of s/A/B/");
   console.log("  -r, --recursive           Scan directories for JavaScript files.");
+  console.log("  -V, --version             Show version information.");
+  process.exit(0);
+}
+
+function version() {
+  var package = JSON.parse(fs.readFileSync(__dirname + '/../package.json'));
+  console.log("jspatch " + package.version);
   process.exit(0);
 }
 
 (function parseArgs() {
-  var getopt = require('node-getopt');
+  var getopt = require('posix-getopt');
   var parser = new getopt.BasicParser(
-    'f:(match-script)J(javascript)e:(expression)r(recursive)_(help)',
+    'f:(match-script)J(javascript)e:(expression)r(recursive)V(version)_(help)',
     process.argv);
 
   while ((option = parser.getopt()) !== undefined) {
@@ -52,6 +59,9 @@ function usage(hasError) {
         break;
       case 'r':
         config.recursive = true;
+        break;
+      case 'V':
+        version();
         break;
       case '?':
       case '_':
