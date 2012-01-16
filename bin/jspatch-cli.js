@@ -11,6 +11,7 @@ var jsgrep = require('../lib/jsgrep.js');
 var config = {
   paths: [ ],
   recursive: false,
+  inPlace: false,
   patchFile: false,
   sedMode: false,
   asJavascript: false
@@ -29,6 +30,7 @@ function usage(hasError) {
   console.log("  -f, --patch-script=FILE   Path to patch script.");
   console.log("  -J, --javascript          Interpret PATCHFILE as a match script.");
   console.log("  -e, --expression=SCRIPT   Sed mode. SCRIPT is in the form of s/A/B/");
+  console.log("  -i, --in-place            Perform the modifications.");
   console.log("  -r, --recursive           Scan directories for JavaScript files.");
   console.log("  -V, --version             Show version information.");
   process.exit(0);
@@ -43,7 +45,8 @@ function version() {
 (function parseArgs() {
   var getopt = require('posix-getopt');
   var parser = new getopt.BasicParser(
-    'f:(match-script)J(javascript)e:(expression)r(recursive)V(version)_(help)',
+    'f:(match-script)J(javascript)e:(expression)i(in-place)r(recursive)' +
+    'V(version)_(help)',
     process.argv);
 
   while ((option = parser.getopt()) !== undefined) {
@@ -56,6 +59,9 @@ function version() {
         break;
       case 'e':
         config.sedMode = option.optarg;
+        break;
+      case 'i':
+        config.inPlace = true;
         break;
       case 'r':
         config.recursive = true;
@@ -180,11 +186,14 @@ function doFile(filename, callback) {
     return callback();
   }
 
+  var fileMatched = false;
+
   try {
     jsgrep.jsgrep({
       source: ast,
       matchScript: matchFn,
       callback: function(node, variables) {
+        fileMatched = true;
       }
     });
   } catch(e) {
@@ -195,16 +204,27 @@ function doFile(filename, callback) {
     throw e;
   }
 
+  if (!fileMatched) {
+    return callback();
+  }
+
   var modifiedSource = ast.tokenizer.source;
+  var isValid = true;
 
   // Try to parse the modified source
   try {
     Narcissus.parser.parse(modifiedSource, 'modified source', 1);
   } catch(e) {
-    console.log('jspatch: ' + filename +
+    isValid = false;
+
+    console.error('jspatch: ' + filename +
       ': warning: modifications resulted in an invalid JavaScript file!');
-    console.log('This is probably a bug in jspatch. ' +
+    console.error('This is probably a bug in jspatch. ' +
       'Please let ry@fb.com know!');
+
+    if (config.inPlace) {
+      console.error('Not modifying ' + filename + ' due to error.');
+    }
   }
 
   if (source.substr(0, 4) == '//#!') {
@@ -213,7 +233,12 @@ function doFile(filename, callback) {
     modifiedSource = modifiedSource.substr(2);
   }
 
-  generateDiff(filename, modifiedSource, callback);
+  if (isValid && config.inPlace) {
+    fs.writeFileSync(filename, modifiedSource);
+    return callback();
+  } else {
+    generateDiff(filename, modifiedSource, callback);
+  }
 }
 
 function queueDirectory(directory) {
