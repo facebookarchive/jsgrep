@@ -94,30 +94,15 @@ var matchFn;
 function processPatch(patchSource, patchFilename) {
   var lineNumber = 1;
   var chunks = _.map(patchSource.split('\n---\n'), function(chunkSource) {
-    var lines = chunkSource.split('\n');
     var chunk = {
-      find: [],
+      find: jsgrep.Matcher.getPatternFromPatch(chunkSource),
       patch: chunkSource,
       filename: patchFilename || "",
       lineNumber: lineNumber
     };
 
-    for(var i = 0; i < lines.length; i++) {
-      if (lines[i][0] == '-') {
-        chunk.find.push(lines[i].substr(1));
+    lineNumber += chunkSource.split('\n').length + 1;
 
-      } else if (lines[i][0] == '+') {
-        // So line numbers match up
-        chunk.find.push('\n');
-
-      } else {
-        chunk.find.push(lines[i]);
-      }
-    }
-
-    chunk.find = chunk.find.join('\n').trim();
-
-    lineNumber += lines.length + 1;
     return chunk;
   });
 
