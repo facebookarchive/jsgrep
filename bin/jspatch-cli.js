@@ -128,7 +128,7 @@ function processPatch(patchSource, patchFilename) {
         filename: chunk.filename,
         lineNumber: chunk.lineNumber
       };
-      var matches = ast.findStrict(chunk.find, function(v) {
+      ast.findStrict(chunk.find, function(v) {
         v.node.applyPatch(chunk.patch, patchFilename, chunk.lineNumber);
       }, matchOptions);
     });
@@ -144,12 +144,7 @@ function generateDiff(oldFilename, newFile, callback) {
     tries++;
   } while (path.existsSync(tempFilename));
 
-  var tempFile = fs.openSync(tempFilename, 'w');
-  try {
-    fs.writeSync(tempFile, newFile);
-  } finally {
-    fs.closeSync(tempFile);
-  }
+  fs.writeFileSync(tempFilename, newFile);
 
   var child =
     child_process.spawn('diff', [ '-u', oldFilename, tempFilename ]);
