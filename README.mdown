@@ -1,56 +1,24 @@
-# jsgrep: a syntactically-aware grep for JavaScript
+# jsgrep / jspatch - toolkit for searching and modifying JavaScript
 
-Jsgrep is program that searches for a particular JavaScript pattern using the
-abstract syntax tree (AST) of the program. This enables matching expressions
+**Jsgrep** is program that searches for a particular JavaScript pattern using
+the abstract syntax tree (AST) of the program. This enables matching expressions
 based on their JavaScript meaning, rather than based on simple strings.
+**Jspatch** is a tool to take that information and programmatically modify the
+original source code.
 
-## Examples
+## Example
 
-**Find calls to window.setTimeout with a 0 timeout**
-
-    $ jsgrep 'setTimeout(A, 0)' tests/*.js
-    tests/jquery.js:        setTimeout( function() {
-    tests/jquery.js:    setTimeout( clearFxNow, 0 );
-
-Jsgrep uses metavariables as wildcards. Metavariables match any valid JavaScript
-chunk, so in this case, the first match was an entire inline function. In both
-cases, the second parameter to setTimeout was a literal value of 0.
-
-**Find value defaulting**
-
-    $ jsgrep "A = A || B;" tests/*.js
-    tests/jquery.js:            args = args || [];
-    tests/jquery.js:    dataType = dataType || options.dataTypes[ 0 ];
-
-When the pattern references the same metavariable multiple times, jsgrep ensures
-that the value of the metavariable is the same throughout the match.
-
-**Find the names of all invoked events**
-
-    $ ./jsgrep -p B "A.fire(B, ...)" tests/*.js
-    tests/connect.js: 'auth.logout'
-    tests/connect.js: 'auth.login'
-
-The `...` operator matches 0 or more expressions in function calls and array
-initializers. This example also uses the `-p` flag to print only a particular
-matched variable.
-
-**Find classes that have a 'path' property**
+**Jsgrep: find Javelin classes that have a 'path' property**
 
     $ jsgrep -p C "JX.install(C, { properties: { path: X } })" tests/*.js
     tests/javelin.js: 'Event'
     tests/javelin.js: 'URI'
 
-Jsgrep allows you to search object initializations partially, which enables
-easily drilling into the structure of JavaScript classes.
+Jsgrep allows easily drilling into the structure of JavaScript classes. In this
+example, jsgrep finds Javelin classes that contain a 'path' property. The class
+name is stored in the metavariable C, which will be output.
 
-## jspatch
-
-Jsgrep allows you to identify source code that resembles a certain pattern.
-Jspatch is a tool to take that information and programmatically modify the
-original source code.
-
-**Replace setTimeout with window.setTimeout**
+**Jspatch: replace setTimeout with window.setTimeout in jQuery**
 
     $ jspatch -e 's/setTimeout( A, B )/window.setTimeout( A, B )/' tests/jquery.js
     --- tests/jquery.js 2012-01-10 14:51:36.000000000 -0800
@@ -74,51 +42,20 @@ original source code.
                     !jQuery._data( elem, markDataKey ) ) {
                     jQuery.removeData( elem, deferDataKey, true );
 
-Sed mode allows you to quickly perform simple substitutions on the source code.
+Jspatch supports a versatile patch file format that can perform far more complex
+transformations as well. For more information, see the
+[online documentation](https://github.com/facebook/jsgrep/wiki).
 
-**Refactor properties/members into just properties**
+## Installation
 
-    $ cat tests/transform.spatch
-     JX.install(N, {
-       ...,
-    -  properties : {
-    +  members : {
-         ...
-    +    ,
-    -  },
-    -  members : {
-         ...
-       },
-       ...
-     })
+    npm install jsgrep-toolkit
 
-    $ jspatch -f tests/transform.spatch tests/javelin.js
-    --- tests/javelin.js    2012-01-08 10:55:04.000000000 -0800
-    +++ /tmp/jspatch.javelin.js 2012-01-12 03:06:45.000000000 -0800
-    @@ -3615,16 +3615,14 @@
-         }
-       },
+To install from source code:
 
-    -  properties : {
-    +  members : {
-         protocol: undefined,
-         port: undefined,
-         path: undefined,
-         queryParams: undefined,
-         fragment: undefined,
-    -    querySerializer: undefined
-    -  },
-    -
-    -  members : {
-    +    querySerializer: undefined,
-    +
-         _domain: undefined,
-
-         /**
-
-This complex spatch file leverages the fact that properties and members are
-always adjacent to one another in the source. This could be verified using
-jsgrep to ensure that no cases were missed.
+    git clone https://github.com/CGamesPlay/jsgrep.git
+    cd jsgrep
+    git submodule update --init
+    npm install
 
 ## TODO
 
