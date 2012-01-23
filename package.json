@@ -1,7 +1,6 @@
 {
-  "name": "jsgrep",
-  "version": "1.0.0-alpha" ,
-  "private": true,
+  "name": "jsgrep-toolkit",
+  "version": "1.0.0-beta" ,
   "description": "Syntactically-aware grep for JavaScript",
   "homepage": "https://github.com/facebook/jsgrep",
   "author": "Ryan Patterson <ry@fb.com>",
