@@ -52,7 +52,7 @@ transformations as well. For more information, see the
 
 To install from source code:
 
-    git clone https://github.com/CGamesPlay/jsgrep.git
+    git clone https://github.com/facebook/jsgrep.git
     cd jsgrep
     git submodule update --init
     npm install
