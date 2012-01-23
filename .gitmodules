@@ -1,0 +1,3 @@
+[submodule "narcissus"]
+	path = narcissus
+	url = https://github.com/CGamesPlay/narcissus.git

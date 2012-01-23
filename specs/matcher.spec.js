@@ -1,4 +1,4 @@
-var Narcissus = require('narcissus/main');
+var Narcissus = require('../narcissus');
 var _ = require('underscore');
 var jsgrep = require('../lib/jsgrep.js');
 var path = require('path');

@@ -14,7 +14,7 @@
 // License for the specific language governing permissions and limitations
 // under the License.var fs = require('fs');
 
-var Narcissus = require('narcissus');
+var Narcissus = require('../narcissus');
 var _ = require('underscore');
 var child_process = require('child_process');
 var fs = require('fs');

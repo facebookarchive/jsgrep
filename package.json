@@ -21,9 +21,5 @@
   "dependencies": {
     "posix-getopt": "0",
     "underscore": "1"
-  },
-
-  "bundledDependencies": [
-    "narcissus"
-  ]
+  }
 }
