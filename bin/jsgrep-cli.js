@@ -206,10 +206,9 @@ function doFile(filename) {
           output = node.tokenizer.source.substring(node.start, node.end);
         } else if (config.print === PRINT_METAVAR) {
           if (!variables[config.printMetavar]) {
-            throw {
-              message: "Metavariable " + config.printMetavar +
-                " is not bound to any expression."
-            };
+            console.error("jsgrep: Metavariable " + config.printMetavar +
+                " is not bound to any expression.");
+            process.exit(1);
           } else {
             var matchNode = variables[config.printMetavar];
             output = matchNode.tokenizer.source.substring(
@@ -231,12 +230,9 @@ function doFile(filename) {
       }
     });
   } catch(e) {
-    if (!(e instanceof Error) && e.message) {
-      console.error("jsgrep: " + e.message);
-      process.exit(1);
-    }
     if (e !== 'done') {
-      throw e;
+      console.error("jsgrep: " + e.stack);
+      process.exit(1);
     }
   }
 

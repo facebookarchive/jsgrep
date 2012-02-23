@@ -191,11 +191,8 @@ function doFile(filename, callback) {
       }
     });
   } catch(e) {
-    if (!(e instanceof Error) && e.message) {
-      console.error("jspatch: " + e.message);
-      process.exit(1);
-    }
-    throw e;
+    console.error("jspatch: " + e.stack);
+    process.exit(1);
   }
 
   if (!fileMatched) {
