@@ -211,8 +211,7 @@ function doFile(filename) {
             process.exit(1);
           } else {
             var matchNode = variables[config.printMetavar];
-            output = matchNode.tokenizer.source.substring(
-              matchNode.start, matchNode.end);
+            output = jsgrep.Matcher.getSourceForNode(matchNode);
             lineNumber = matchNode.lineno;
           }
         } else {

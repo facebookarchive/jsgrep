@@ -7,7 +7,7 @@ var fs = require('fs');
 // These tests are pretty weak, they just run some random queries and check the
 // count of the results in a known corpus.
 
-describe('Matcher.find', function() {
+xdescribe('Matcher.find', function() {
   const fileName = path.resolve(path.join(__dirname, '../tests/jquery.js'));
   var source = fs.readFileSync(fileName);
   var sourceAst = Narcissus.parser.parse(source, fileName, 1);
@@ -53,4 +53,39 @@ describe('Matcher.find', function() {
     });
     expect(results.length).toBe(0);
   });
+});
+
+describe('Matcher offsets', function() {
+  var tests = [
+    {
+      name: 'identifier',
+      search: 'window.document',
+      pattern: 'A.B',
+      result: { A: 'window', B: 'document' }
+
+    }
+  ];
+
+  function runTest(test) {
+    it('for ' + test.name, function() {
+      var matcher = new jsgrep.Matcher(test.search);
+      var resultCount = 0;
+
+      matcher.find(test.pattern, function(v) {
+        resultCount++;
+
+        for (var metavar in test.result) {
+          if (test.result.hasOwnProperty(metavar)) {
+            expect(v[metavar].value).toBe(test.result[metavar]);
+          }
+        }
+      });
+
+      expect(resultCount).toEqual(1);
+    });
+  }
+
+  for (var i = 0; i < tests.length; i++) {
+    runTest(tests[i]);
+  }
 });
