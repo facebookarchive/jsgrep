@@ -17,6 +17,7 @@ describe('Matcher.getPatchedCode', function() {
         "+2"
       ].join('\n'),
       result: '2'
+
     }, {
       name: 'two replacements',
       source: '1, 1',
@@ -25,6 +26,7 @@ describe('Matcher.getPatchedCode', function() {
         "+2"
       ].join('\n'),
       result: '2, 2'
+
     }, {
       name: 'remove var',
       source: 'var a = b;',
@@ -32,6 +34,7 @@ describe('Matcher.getPatchedCode', function() {
         "-var a = b;"
       ].join('\n'),
       result: ''
+
     }, {
       name: 'match token type',
       source: '({ "key": value })',
@@ -40,6 +43,15 @@ describe('Matcher.getPatchedCode', function() {
         "+newKey"
       ].join('\n'),
       result: '({ "key": value })'
+
+    }, {
+      name: 'token offsets',
+      source: 'call(args)',
+      patch: [
+        '-call(A)'
+      ].join('\n'),
+      result: ''
+
     }
   ];
 
