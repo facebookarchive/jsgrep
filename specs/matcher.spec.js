@@ -7,7 +7,7 @@ var fs = require('fs');
 // These tests are pretty weak, they just run some random queries and check the
 // count of the results in a known corpus.
 
-xdescribe('Matcher.find', function() {
+describe('Matcher.find', function() {
   const fileName = path.resolve(path.join(__dirname, '../tests/jquery.js'));
   var source = fs.readFileSync(fileName);
   var sourceAst = Narcissus.parser.parse(source, fileName, 1);
@@ -53,6 +53,13 @@ xdescribe('Matcher.find', function() {
     });
     expect(results.length).toBe(0);
   });
+  
+  it ('for "with" keyword', function() {
+    var matcher = new jsgrep.Matcher('with ({x: 10}) { console.log(x); }');
+    var results = matcher.find('with (A) { ... }');
+    expect(results.length).toBe(1);
+  });
+  
 });
 
 describe('Matcher offsets', function() {
@@ -89,3 +96,4 @@ describe('Matcher offsets', function() {
     runTest(tests[i]);
   }
 });
+
