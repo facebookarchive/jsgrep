@@ -120,17 +120,36 @@ function processPatch(patchSource, patchFilename) {
     return chunk;
   });
 
-  return function(ast) {
+  return function(matcher) {
     _.each(chunks, function(chunk) {
       var matchOptions = {
         strictMatches: true,
         filename: chunk.filename,
         lineNumber: chunk.lineNumber
       };
-      ast.findStrict(chunk.find, function(v) {
-        v.node.applyPatch(chunk.patch, patchFilename, chunk.lineNumber);
-      }, matchOptions);
+      var reparse;
+      do {
+        if (reparse) {
+          matcher.ast = Narcissus.parser.parse(
+            matcher.ast.tokenizer.source, chunk.filename, 1);
+          reparse = false;
+        }
+        try {
+          matcher.findStrict(chunk.find, function(v) {
+            if (reparse) {
+              throw 'reparse';
+            }
+            v.node.applyPatch(chunk.patch, patchFilename, chunk.lineNumber);
+            reparse = true;
+          }, matchOptions);
+        } catch (ex) {
+          if (ex !== 'reparse') {
+            throw ex;
+          }
+        }
+      } while(reparse);
     });
+    return matcher.ast;
   };
 }
 
@@ -183,7 +202,7 @@ function doFile(filename, callback) {
   var fileMatched = false;
 
   try {
-    jsgrep.jsgrep({
+    ast = jsgrep.jsgrep({
       source: ast,
       matchScript: matchFn,
       callback: function(node, variables) {
